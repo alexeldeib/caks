@@ -1,3 +1,6 @@
+# Cluster API Provider AKS
+
+This project is in pre-alpha state.
 
 # Contributing
 

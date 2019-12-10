@@ -1,0 +1,7 @@
+domain: cluster.x-k8s.io
+repo: github.com/Azure/cluster-api-provider-aks
+resources:
+- group: infrastructure
+  kind: AzureManagedCluster
+  version: v1alpha1
+version: "2"
