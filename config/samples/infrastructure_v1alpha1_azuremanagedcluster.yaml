@@ -1,7 +1,21 @@
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: AzureManagedCluster
 metadata:
-  name: azuremanagedcluster-sample
+  name: capi-aks-sample
 spec:
-  # Add fields here
-  foo: bar
+  subscriptionId: 8643025a-c059-4a48-85d0-d76f51d63a74
+  resourceGroup: ace-break
+  location: westus2
+---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Cluster
+metadata:
+  name: capi-quickstart
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["192.168.0.0/16"]
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    kind: AzureManagedCluster
+    name: capi-aks-sample

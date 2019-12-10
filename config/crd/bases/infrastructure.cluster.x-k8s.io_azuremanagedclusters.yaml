@@ -1,0 +1,94 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: (devel)
+  creationTimestamp: null
+  name: azuremanagedclusters.infrastructure.cluster.x-k8s.io
+spec:
+  group: infrastructure.cluster.x-k8s.io
+  names:
+    kind: AzureManagedCluster
+    listKind: AzureManagedClusterList
+    plural: azuremanagedclusters
+    singular: azuremanagedcluster
+  scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: AzureManagedCluster is the Schema for the azuremanagedclusters
+        API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: AzureManagedClusterSpec defines the desired state of AzureManagedCluster
+          properties:
+            location:
+              description: Location is the region where the azure resource resides.
+              type: string
+            resourceGroup:
+              description: ResourceGroup is the resource group name for an azure resource.
+              pattern: ^[-\w\._\(\)]+$
+              type: string
+            subscriptionId:
+              description: SubscriptionID is the subscription id for an azure resource.
+              pattern: ^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$
+              type: string
+          required:
+          - location
+          - resourceGroup
+          - subscriptionId
+          type: object
+        status:
+          description: AzureManagedClusterStatus defines the observed state of AzureManagedCluster
+          properties:
+            apiEndpoints:
+              description: APIEndpoints represents the endpoints to communicate with
+                the control plane.
+              items:
+                description: APIEndpoint represents a reachable Kubernetes API endpoint.
+                properties:
+                  host:
+                    description: The hostname on which the API server is serving.
+                    type: string
+                  port:
+                    description: The port on which the API server is serving.
+                    type: integer
+                required:
+                - host
+                - port
+                type: object
+              type: array
+            ready:
+              description: Ready is true when the cluster infrastructure is ready
+                for dependent steps to utilize it.
+              type: boolean
+          required:
+          - ready
+          type: object
+      type: object
+  version: v1alpha2
+  versions:
+  - name: v1alpha2
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
