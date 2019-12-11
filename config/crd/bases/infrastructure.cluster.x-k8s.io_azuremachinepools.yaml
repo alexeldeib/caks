@@ -1,0 +1,62 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  name: azuremachinepools.infrastructure.cluster.x-k8s.io
+spec:
+  group: infrastructure.cluster.x-k8s.io
+  names:
+    kind: AzureMachinePool
+    listKind: AzureMachinePoolList
+    plural: azuremachinepools
+    singular: azuremachinepool
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      description: AzureMachinePool is the Schema for the azuremachinepools API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: AzureMachinePoolSpec defines the desired state of AzureMachinePool
+          properties:
+            capacity:
+              description: Capacity is the number of VMs in a node pool.
+              format: int32
+              type: integer
+            name:
+              description: Name of the node pool.
+              type: string
+            sku:
+              description: SKU of the VMs in the node pool.
+              type: string
+          type: object
+        status:
+          description: AzureMachinePoolStatus defines the observed state of AzureMachinePool
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

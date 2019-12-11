@@ -7,9 +7,11 @@ require (
 	github.com/Azure/go-autorest v13.3.1+incompatible
 	github.com/Azure/go-autorest/autorest v0.9.2
 	github.com/Azure/go-autorest/autorest/azure/auth v0.4.1
-	github.com/Azure/go-autorest/autorest/to v0.3.0 // indirect
+	github.com/Azure/go-autorest/autorest/to v0.3.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
 	github.com/go-logr/logr v0.1.0
+	github.com/google/addlicense v0.0.0-20191205215950-c6b7f1e7f34a // indirect
+	github.com/google/go-cmp v0.3.0
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	k8s.io/api v0.0.0-20190918195907-bd6ac527cfd2
