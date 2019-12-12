@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.4
+    controller-gen.kubebuilder.io/version: (devel)
   creationTimestamp: null
   name: azuremanagedclusters.infrastructure.cluster.x-k8s.io
 spec:
@@ -43,6 +43,33 @@ spec:
             name:
               description: Name is the name of the managed cluster in Azure.
               type: string
+            nodePools:
+              description: NodePools is the list of additional node pools managed
+                by this cluster.
+              items:
+                description: AzureMachinePoolSpec defines the desired state of AzureMachinePool
+                properties:
+                  capacity:
+                    description: Capacity is the number of VMs in a node pool.
+                    format: int32
+                    type: integer
+                  name:
+                    description: Name of the node pool.
+                    type: string
+                  sku:
+                    description: SKU of the VMs in the node pool.
+                    type: string
+                required:
+                - capacity
+                - name
+                - sku
+                type: object
+              minItems: 1
+              type: array
+            patch:
+              description: Patch is free-form JSON string expected to Unmarshal into
+                a version 2019-10-01 containerservice.ManagedClusterProperties struct.
+              type: string
             resourceGroup:
               description: ResourceGroup is the resource group name for an azure resource.
               pattern: ^[-\w\._\(\)]+$
@@ -61,9 +88,11 @@ spec:
           required:
           - location
           - name
+          - nodePools
           - resourceGroup
           - sshPublicKey
           - subscriptionId
+          - version
           type: object
         status:
           description: AzureManagedClusterStatus defines the observed state of AzureManagedCluster

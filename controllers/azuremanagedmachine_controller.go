@@ -26,7 +26,7 @@ type AzureManagedMachineReconciler struct {
 
 func (r *AzureManagedMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
-	_ = r.Log.WithValues("azuremanagedmachine", req.NamespacedName)
+	// log := r.Log.WithValues("azuremanagedmachine", req.NamespacedName)
 
 	// your logic here
 

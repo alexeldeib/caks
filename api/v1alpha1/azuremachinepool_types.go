@@ -10,11 +10,11 @@ import (
 // AzureMachinePoolSpec defines the desired state of AzureMachinePool
 type AzureMachinePoolSpec struct {
 	// Name of the node pool.
-	Name string `json:"name,omitempty"`
+	Name string `json:"name"`
 	// SKU of the VMs in the node pool.
-	SKU string `json:"sku,omitempty"`
+	SKU string `json:"sku"`
 	// Capacity is the number of VMs in a node pool.
-	Capacity int32 `json:"capacity,omitempty"`
+	Capacity int32 `json:"capacity"`
 }
 
 // AzureMachinePoolStatus defines the observed state of AzureMachinePool

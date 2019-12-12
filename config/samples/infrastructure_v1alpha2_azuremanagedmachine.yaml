@@ -1,7 +1,21 @@
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  name: capi-aks-sample
+  labels:
+    cluster.x-k8s.io/control-plane: "false"
+    cluster.x-k8s.io/cluster-name: "capi-quickstart"
+spec:
+  version: 1.13.12
+  bootstrap:
+    data: ""
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: AzureManagedMachine
+    name: capi-aks-sample
+---
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: AzureManagedMachine
 metadata:
-  name: azuremanagedmachine-sample
-spec:
-  # Add fields here
-  foo: bar
+  name: capi-aks-sample
+spec: {}

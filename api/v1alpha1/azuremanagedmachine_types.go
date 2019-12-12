@@ -9,13 +9,22 @@ import (
 
 // AzureManagedMachineSpec defines the desired state of AzureManagedMachine
 type AzureManagedMachineSpec struct {
+	// Pool is the name of the agent pool this machine is part of.
+	// Defaults to primary node pool.
+	// +optional
+	Pool *string `json:"pool,omitempty"`
+	// ProviderID is the unique identifier as specified by the cloud provider.
+	ProviderID *string `json:"providerID,omitempty"`
 }
 
 // AzureManagedMachineStatus defines the observed state of AzureManagedMachine
 type AzureManagedMachineStatus struct {
+	// Ready is true when the provider resource is ready.
+	Ready bool `json:"ready"`
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // AzureManagedMachine is the Schema for the azuremanagedmachines API
 type AzureManagedMachine struct {
@@ -27,7 +36,6 @@ type AzureManagedMachine struct {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
 
 // AzureManagedMachineList contains a list of AzureManagedMachine
 type AzureManagedMachineList struct {

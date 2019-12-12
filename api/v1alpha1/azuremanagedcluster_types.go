@@ -22,10 +22,10 @@ type AzureManagedClusterSpec struct {
 	// SSHPublicKey is a string literal containing an ssh public key.
 	SSHPublicKey string `json:"sshPublicKey"`
 	// Version defines the kubernetes version of the cluster.
-	Version string `json:"version,omitempty"`
-	// NodePools is the list of expected node pools managed by this cluster.
-	// kubebuilder:validation:MinItems=1
-	// NodePools []AzureMachinePool `json:"nodePools"`
+	Version string `json:"version"`
+	// NodePools is the list of additional node pools managed by this cluster.
+	// +kubebuilder:validation:MinItems=1
+	NodePools []AzureMachinePoolSpec `json:"nodePools"`
 }
 
 // AzureManagedClusterStatus defines the observed state of AzureManagedCluster
