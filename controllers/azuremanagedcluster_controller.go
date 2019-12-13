@@ -275,9 +275,9 @@ func convertCRDToAzure(local *infrav1.AzureManagedCluster) (containerservice.Man
 
 func convertMachinePool(machinePools []infrav1.AzureMachinePoolSpec) *[]containerservice.ManagedClusterAgentPoolProfile {
 	var result []containerservice.ManagedClusterAgentPoolProfile
-	for _, np := range machinePools {
+	for index, np := range machinePools {
 		result = append(result, containerservice.ManagedClusterAgentPoolProfile{
-			Name:   &np.Name,
+			Name:   &(machinePools[index].Name),
 			VMSize: containerservice.VMSizeTypes(np.SKU),
 			Type:   containerservice.VirtualMachineScaleSets,
 		})

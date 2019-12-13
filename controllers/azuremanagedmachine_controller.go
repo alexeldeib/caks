@@ -118,15 +118,25 @@ func (r *AzureManagedMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, err
 	}
 
+	litter.Dump(infraCluster.Spec)
 	litter.Dump(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)
 
+	// We provision node pools lazily: first a user adds a node pool to the AzureManagedCluster object,
+	// and once a pool exists there they may target it with newly created machines.
+	// Machines targeting non-existent node pools will be ignored.
+	// Node pools with zero nodes will be deleted, except if the primary pool would be deleted while other nodes remain.
+	n := 0
 	for index, pool := range *desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles {
 		count := int32(clusterCapacities[ownerCluster.Name][*pool.Name])
 		fmt.Printf("count: %d\n", count)
 		(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[index].Count = &count
+		if count > 0 {
+			(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[n] = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[index]
+			n++
+		}
 	}
-
-	// nonEmptyPools := []containerservice.AgentPoolProfile{}
+	*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[:n]
+	litter.Dump(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)
 
 	// If we didn't find any corrsponding AKS cluster, pick a node pool as default and create the cluster.
 	// We'll add the rest after initial provisioning. We need to know the default to prevent deletion of
@@ -154,7 +164,7 @@ func (r *AzureManagedMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	normalized := normalize(aksCluster)
 
 	log.Info("diffing normalized found cluster with desired")
-	ignored := cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.ServicePrincipalProfile.Secret")
+	ignored := cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.ServicePrincipalProfile")
 	diff := cmp.Diff(desiredAksCluster, normalized, ignored)
 	if diff == "" {
 		log.Info("normalized and desired matched, no update needed (go-cmp)")
