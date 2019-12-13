@@ -10,9 +10,7 @@ import (
 // AzureManagedMachineSpec defines the desired state of AzureManagedMachine
 type AzureManagedMachineSpec struct {
 	// Pool is the name of the agent pool this machine is part of.
-	// Defaults to primary node pool.
-	// +optional
-	Pool *string `json:"pool,omitempty"`
+	Pool string `json:"pool"`
 	// ProviderID is the unique identifier as specified by the cloud provider.
 	ProviderID *string `json:"providerID,omitempty"`
 }

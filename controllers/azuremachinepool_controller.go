@@ -11,7 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 )
 
 // AzureMachinePoolReconciler reconciles a AzureMachinePool object
@@ -35,6 +35,6 @@ func (r *AzureMachinePoolReconciler) Reconcile(req ctrl.Request) (ctrl.Result, e
 
 func (r *AzureMachinePoolReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&infrastructurev1alpha1.AzureMachinePool{}).
+		For(&infrav1.AzureMachinePool{}).
 		Complete(r)
 }

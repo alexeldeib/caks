@@ -4,7 +4,7 @@ package services
 // 	"context"
 
 // 	"github.com/Azure/azure-sdk-for-go/profiles/latest/containerservice/mgmt/containerservice"
-// 	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+// 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 // 	"github.com/Azure/go-autorest/autorest"
 // 	"github.com/Azure/go-autorest/autorest/azure"
 // 	"github.com/Azure/go-autorest/autorest/azure/auth"
@@ -33,7 +33,7 @@ package services
 // 	return client, nil
 // }
 
-// func (svc *ManagedClusterService) CreateOrUpdate(ctx context.Context, local *infrastructurev1alpha1.AzureManagedCluster) (done bool, err error) {
+// func (svc *ManagedClusterService) CreateOrUpdate(ctx context.Context, local *infrav1.AzureManagedCluster) (done bool, err error) {
 // 	client, err := newManagedClustersClient(local.Spec.SubscriptionID, svc.authorizer)
 // 	if err != nil {
 // 		return false, err

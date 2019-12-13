@@ -6,7 +6,7 @@ import (
 	"flag"
 	"os"
 
-	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/cluster-api-provider-aks/controllers"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -24,7 +24,7 @@ var (
 
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
-	_ = infrastructurev1alpha1.AddToScheme(scheme)
+	_ = infrav1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }

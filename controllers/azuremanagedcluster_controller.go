@@ -5,16 +5,15 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
-	"time"
 	"os"
 	goruntime "runtime"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
-	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
@@ -58,7 +57,7 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	ctx := context.Background()
 	log := r.Log.WithValues("azuremanagedcluster", req.NamespacedName)
 
-	var cluster infrastructurev1alpha1.AzureManagedCluster
+	var cluster infrav1.AzureManagedCluster
 	if err := r.Get(ctx, req.NamespacedName, &cluster); err != nil {
 		log.Info("error during fetch from api server")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -95,12 +94,12 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 
 	// Reconcile cluster
-	return r.ensure(ctx, &cluster)
+	return ctrl.Result{}, nil // r.ensure(ctx, &cluster)
 }
 
 func (r *AzureManagedClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&infrastructurev1alpha1.AzureManagedCluster{}).
+		For(&infrav1.AzureManagedCluster{}).
 		Complete(r)
 }
 
@@ -119,7 +118,7 @@ func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedCl
 	return client, nil
 }
 
-func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log logr.Logger, cluster *infrastructurev1alpha1.AzureManagedCluster) error {
+func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log logr.Logger, cluster *infrav1.AzureManagedCluster) error {
 	kubeconfig := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name(cluster.Name, secret.Kubeconfig),
@@ -146,7 +145,7 @@ func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log l
 	return nil
 }
 
-func (r *AzureManagedClusterReconciler) setStatus(ctx context.Context, log logr.Logger, cluster *infrastructurev1alpha1.AzureManagedCluster, ownerCluster *clusterv1.Cluster) error {
+func (r *AzureManagedClusterReconciler) setStatus(ctx context.Context, log logr.Logger, cluster *infrav1.AzureManagedCluster, ownerCluster *clusterv1.Cluster) error {
 	cluster.Status.Ready = true
 	if err := r.Status().Update(ctx, cluster); err != nil {
 		log.Info("failed to patch infra cluster")
@@ -161,13 +160,13 @@ func (r *AzureManagedClusterReconciler) setStatus(ctx context.Context, log logr.
 	return nil
 }
 
-func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *infrastructurev1alpha1.AzureManagedCluster) (ctrl.Result, error) {
+func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *infrav1.AzureManagedCluster) (ctrl.Result, error) {
 	log := r.Log.WithName("ensure")
 
-	if err := validate(cluster); err != nil {
-		log.Error(err, "failed cluster validation")
-		return ctrl.Result{}, nil
-	}
+	// if err := validate(cluster); err != nil {
+	// 	log.Error(err, "failed cluster validation")
+	// 	return ctrl.Result{}, nil
+	// }
 
 	log.Info("creating cluster client")
 	az, err := NewManagedClustersClient(cluster.Spec.SubscriptionID)
@@ -193,7 +192,7 @@ func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *inf
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	if !isFinished(*found.ProvisioningState) {
+	if !isFinished(found.ProvisioningState) {
 		log.Info("requeueing to wait for azure provisioning")
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
@@ -215,13 +214,13 @@ func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *inf
 	return ctrl.Result{Requeue: true}, err
 }
 
-// func convertAzureToCRD(in containerservice.ManagedCluster) (infrastructurev1alpha1.AzureManagedClusterSpec, error) {
+// func convertAzureToCRD(in containerservice.ManagedCluster) (infrav1.AzureManagedClusterSpec, error) {
 // 	tokens := strings.Split(to.String(in.ID), "/")
 // 	if len(tokens) < 8 {
-// 		return infrastructurev1alpha1.AzureManagedClusterSpec{}, errors.New("failed to parse resource id")
+// 		return infrav1.AzureManagedClusterSpec{}, errors.New("failed to parse resource id")
 // 	}
 
-// 	out := infrastructurev1alpha1.AzureManagedClusterSpec{
+// 	out := infrav1.AzureManagedClusterSpec{
 // 		SubscriptionID: tokens[1],
 // 		ResourceGroup:  tokens[3],
 // 		Name:           tokens[7],
@@ -233,9 +232,9 @@ func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *inf
 // 			out.Version = *in.ManagedClusterProperties.KubernetesVersion
 // 		}
 // 		if in.ManagedClusterProperties.AgentPoolProfiles != nil {
-// 			out.NodePools = []infrastructurev1alpha1.AzureMachinePoolSpec{}
+// 			out.NodePools = []infrav1.AzureMachinePoolSpec{}
 // 			for _, agentPool := range *in.ManagedClusterProperties.AgentPoolProfiles {
-// 				np := infrastructurev1alpha1.AzureMachinePoolSpec{
+// 				np := infrav1.AzureMachinePoolSpec{
 // 					Name:     to.String(agentPool.Name),
 // 					SKU:      string(agentPool.VMSize),
 // 					Capacity: to.Int32(agentPool.Count),
@@ -248,7 +247,7 @@ func (r *AzureManagedClusterReconciler) ensure(ctx context.Context, cluster *inf
 // 	return out, nil
 // }
 
-func convertCRDToAzure(local *infrastructurev1alpha1.AzureManagedCluster) (containerservice.ManagedCluster, error) {
+func convertCRDToAzure(local *infrav1.AzureManagedCluster) (containerservice.ManagedCluster, error) {
 	settings, err := auth.GetSettingsFromFile()
 	if err != nil {
 		return containerservice.ManagedCluster{}, err
@@ -274,24 +273,24 @@ func convertCRDToAzure(local *infrastructurev1alpha1.AzureManagedCluster) (conta
 	}, nil
 }
 
-func convertMachinePool(machinePools []infrastructurev1alpha1.AzureMachinePoolSpec) *[]containerservice.ManagedClusterAgentPoolProfile {
+func convertMachinePool(machinePools []infrav1.AzureMachinePoolSpec) *[]containerservice.ManagedClusterAgentPoolProfile {
 	var result []containerservice.ManagedClusterAgentPoolProfile
 	for _, np := range machinePools {
 		result = append(result, containerservice.ManagedClusterAgentPoolProfile{
 			Name:   &np.Name,
-			Count:  &np.Capacity,
 			VMSize: containerservice.VMSizeTypes(np.SKU),
+			Type:   containerservice.VirtualMachineScaleSets,
 		})
 	}
 	return &result
 }
 
-func validate(cluster *infrastructurev1alpha1.AzureManagedCluster) error {
-	if cluster.Spec.NodePools[0].Capacity < 1 {
-		return errors.New("default node pool must have at least one node")
-	}
-	return nil
-}
+// func validate(cluster *infrav1.AzureManagedCluster) error {
+// 	if cluster.Spec.NodePools[0].Capacity < 1 {
+// 		return errors.New("default node pool must have at least one node")
+// 	}
+// 	return nil
+// }
 
 // normalize constructs a fresh containerservice.ManagedCluster with only the fields set by the controller, not fields defaulted by Azure.
 func normalize(before containerservice.ManagedCluster) containerservice.ManagedCluster {
@@ -322,8 +321,11 @@ func normalize(before containerservice.ManagedCluster) containerservice.ManagedC
 	return after
 }
 
-func isFinished(state string) bool {
-	switch state {
+func isFinished(state *string) bool {
+	if state == nil {
+		return true
+	}
+	switch *state {
 	case stateFailed:
 		return true
 	case stateSucceeded:

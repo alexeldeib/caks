@@ -31,7 +31,8 @@ type AzureManagedClusterSpec struct {
 // AzureManagedClusterStatus defines the observed state of AzureManagedCluster
 type AzureManagedClusterStatus struct {
 	// Ready is true when the cluster infrastructure is ready for dependent steps to utilize it.
-	Ready bool `json:"ready"`
+	Ready           bool    `json:"ready"`
+	DefaultNodePool *string `json:"defaultNodePool,omitempty"`
 	// APIEndpoints represents the endpoints to communicate with the control plane.
 	// +optional
 	APIEndpoints []APIEndpoint `json:"apiEndpoints,omitempty"`

@@ -14,7 +14,7 @@ type AzureMachinePoolSpec struct {
 	// SKU of the VMs in the node pool.
 	SKU string `json:"sku"`
 	// Capacity is the number of VMs in a node pool.
-	Capacity int32 `json:"capacity"`
+	// Capacity int32 `json:"capacity"`
 }
 
 // AzureMachinePoolStatus defines the observed state of AzureMachinePool
