@@ -75,7 +75,7 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 
 	log = log.WithValues("cluster", ownerCluster.Name)
 
-	if err := r.setKubeconfig(ctx, log, &cluster); err != nil {
+	if err := r.setKubeconfig(ctx, log, ownerCluster); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -103,22 +103,7 @@ func (r *AzureManagedClusterReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Complete(r)
 }
 
-func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedClustersClient, error) {
-	client := containerservice.NewManagedClustersClient(subscriptionID)
-	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
-		return containerservice.ManagedClustersClient{}, err
-	}
-	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
-	if err != nil {
-		return containerservice.ManagedClustersClient{}, err
-	}
-	client.Authorizer = authorizer
-	client.RequestInspector = LogRequest()
-	client.ResponseInspector = LogResponse()
-	return client, nil
-}
-
-func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log logr.Logger, cluster *infrav1.AzureManagedCluster) error {
+func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log logr.Logger, cluster *clusterv1.Cluster) error {
 	kubeconfig := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name(cluster.Name, secret.Kubeconfig),
@@ -345,6 +330,36 @@ func decorateFailure(log logr.Logger) logr.Logger {
 	programCounter, filename, line, _ := goruntime.Caller(1)
 	fn := goruntime.FuncForPC(programCounter).Name()
 	return log.WithValues("failedAt", fmt.Sprintf("[%s]%s:%d", fn, filename, line))
+}
+
+func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedClustersClient, error) {
+	client := containerservice.NewManagedClustersClient(subscriptionID)
+	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+		return containerservice.ManagedClustersClient{}, err
+	}
+	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
+	if err != nil {
+		return containerservice.ManagedClustersClient{}, err
+	}
+	client.Authorizer = authorizer
+	client.RequestInspector = LogRequest()
+	client.ResponseInspector = LogResponse()
+	return client, nil
+}
+
+func NewAgentPoolsClient(subscriptionID string) (containerservice.AgentPoolsClient, error) {
+	client := containerservice.NewAgentPoolsClient(subscriptionID)
+	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+		return containerservice.AgentPoolsClient{}, err
+	}
+	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
+	if err != nil {
+		return containerservice.AgentPoolsClient{}, err
+	}
+	client.Authorizer = authorizer
+	client.RequestInspector = LogRequest()
+	client.ResponseInspector = LogResponse()
+	return client, nil
 }
 
 // LogRequest logs full autorest requests for any Azure client.

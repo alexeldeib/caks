@@ -14,6 +14,8 @@ spec:
   nodePools:
   - name: main 
     sku: Standard_D8s_v3
+  - name: small 
+    sku: Standard_B2ms
 ---
 apiVersion: cluster.x-k8s.io/v1alpha2
 kind: Cluster
