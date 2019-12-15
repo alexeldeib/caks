@@ -12,6 +12,7 @@ import (
 	goruntime "runtime"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/go-autorest/autorest"
@@ -23,8 +24,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/secret"
@@ -117,13 +120,28 @@ func (r *AzureManagedClusterReconciler) setKubeconfig(ctx context.Context, log l
 				},
 			},
 		},
-		Data: map[string][]byte{
-			secret.KubeconfigDataName: []byte(""),
-		},
+	}
+	key := types.NamespacedName{
+		Name:      kubeconfig.Name,
+		Namespace: kubeconfig.Namespace,
 	}
 
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, kubeconfig, func() error { return nil }); err != nil {
-		log.Info("failed to create or update kubeconfig")
+	found := &corev1.Secret{}
+	err := r.Client.Get(ctx, key, found)
+
+	if apierrs.IsNotFound(err) {
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, found, func() error {
+			if found.Data == nil {
+				found.Data = map[string][]byte{}
+			}
+			return nil
+		}); err != nil {
+			log.Info("failed to create or update kubeconfig")
+			return err
+		}
+	}
+
+	if client.IgnoreNotFound(err) != nil {
 		return err
 	}
 
@@ -249,7 +267,7 @@ func convertCRDToAzure(local *infrav1.AzureManagedCluster) (containerservice.Man
 					PublicKeys: &[]containerservice.SSHPublicKey{{KeyData: &local.Spec.SSHPublicKey}},
 				},
 			},
-			AgentPoolProfiles: convertMachinePool(local.Spec.NodePools),
+			// AgentPoolProfiles: makeMachinePool(local.Spec.NodePools),
 			ServicePrincipalProfile: &containerservice.ManagedClusterServicePrincipalProfile{
 				ClientID: to.StringPtr(settings.Values[auth.ClientID]),
 				Secret:   to.StringPtr(settings.Values[auth.ClientSecret]),
@@ -258,16 +276,23 @@ func convertCRDToAzure(local *infrav1.AzureManagedCluster) (containerservice.Man
 	}, nil
 }
 
-func convertMachinePool(machinePools []infrav1.AzureMachinePoolSpec) *[]containerservice.ManagedClusterAgentPoolProfile {
+func makeMachinePools(machinePools []infrav1.AzureMachinePoolSpec) *[]containerservice.ManagedClusterAgentPoolProfile {
 	var result []containerservice.ManagedClusterAgentPoolProfile
-	for index, np := range machinePools {
-		result = append(result, containerservice.ManagedClusterAgentPoolProfile{
-			Name:   &(machinePools[index].Name),
-			VMSize: containerservice.VMSizeTypes(np.SKU),
-			Type:   containerservice.VirtualMachineScaleSets,
-		})
+	for _, np := range machinePools {
+		result = append(result, makeMachinePool(np))
 	}
 	return &result
+}
+
+func makeMachinePool(machinePool infrav1.AzureMachinePoolSpec) containerservice.ManagedClusterAgentPoolProfile {
+	name := ""
+	result := containerservice.ManagedClusterAgentPoolProfile{
+		VMSize: containerservice.VMSizeTypes(machinePool.SKU),
+		Type:   containerservice.VirtualMachineScaleSets,
+		Name:   &name,
+	}
+	*result.Name = machinePool.Name
+	return result
 }
 
 // func validate(cluster *infrav1.AzureManagedCluster) error {
@@ -342,8 +367,8 @@ func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedCl
 		return containerservice.ManagedClustersClient{}, err
 	}
 	client.Authorizer = authorizer
-	client.RequestInspector = LogRequest()
-	client.ResponseInspector = LogResponse()
+	// client.RequestInspector = LogRequest()
+	// client.ResponseInspector = LogResponse()
 	return client, nil
 }
 
@@ -355,6 +380,36 @@ func NewAgentPoolsClient(subscriptionID string) (containerservice.AgentPoolsClie
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
 	if err != nil {
 		return containerservice.AgentPoolsClient{}, err
+	}
+	client.Authorizer = authorizer
+	// client.RequestInspector = LogRequest()
+	// client.ResponseInspector = LogResponse()
+	return client, nil
+}
+
+func NewVirtualMachineScaleSetVMsClient(subscriptionID string) (compute.VirtualMachineScaleSetVMsClient, error) {
+	client := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
+	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+		return compute.VirtualMachineScaleSetVMsClient{}, err
+	}
+	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
+	if err != nil {
+		return compute.VirtualMachineScaleSetVMsClient{}, err
+	}
+	client.Authorizer = authorizer
+	client.RequestInspector = LogRequest()
+	client.ResponseInspector = LogResponse()
+	return client, nil
+}
+
+func NewVirtualMachineScaleSetsClient(subscriptionID string) (compute.VirtualMachineScaleSetsClient, error) {
+	client := compute.NewVirtualMachineScaleSetsClient(subscriptionID)
+	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+		return compute.VirtualMachineScaleSetsClient{}, err
+	}
+	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
+	if err != nil {
+		return compute.VirtualMachineScaleSetsClient{}, err
 	}
 	client.Authorizer = authorizer
 	client.RequestInspector = LogRequest()

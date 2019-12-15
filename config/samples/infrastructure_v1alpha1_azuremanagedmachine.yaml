@@ -43,3 +43,26 @@ metadata:
   name: capi-aks-small
 spec:
   pool: small
+---
+apiVersion: cluster.x-k8s.io/v1alpha2
+kind: Machine
+metadata:
+  name: capi-aks-second
+  labels:
+    cluster.x-k8s.io/control-plane: "false"
+    cluster.x-k8s.io/cluster-name: "capi-quickstart"
+spec:
+  version: 1.13.12
+  bootstrap:
+    data: ""
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: AzureManagedMachine
+    name: capi-aks-second
+---
+  apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+  kind: AzureManagedMachine
+  metadata:
+    name: capi-aks-second
+  spec:
+    pool: small

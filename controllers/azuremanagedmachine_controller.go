@@ -7,21 +7,34 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
+	"github.com/Azure/go-autorest/autorest/azure/auth"
+	"github.com/Azure/go-autorest/autorest/to"
+	"github.com/alexeldeib/stringslice"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 	"github.com/sanity-io/litter"
+	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha2"
 	"sigs.k8s.io/cluster-api/util"
+	kcfg "sigs.k8s.io/cluster-api/util/kubeconfig"
+	"sigs.k8s.io/cluster-api/util/secret"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 )
 
@@ -39,205 +52,7 @@ type AzureManagedMachineReconciler struct {
 func (r *AzureManagedMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("azuremanagedmachine", req.NamespacedName)
-
-	// Fetch the AzureManagedMachine instance.
-	infraMachine := &infrav1.AzureManagedMachine{}
-	if err := r.Get(ctx, req.NamespacedName, infraMachine); err != nil {
-		log.Info("failed to get infra machine from api server")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	// List all machines to match to pools
-	machineList := &infrav1.AzureManagedMachineList{}
-	if err := r.List(ctx, machineList); err != nil {
-		log.Info("failed to get machine list from api server")
-		return ctrl.Result{}, err
-	}
-
-	// Set desired size of all pools
-	clusterCapacities := map[string]map[string]int{}
-	for _, m := range machineList.Items {
-		ownerMachine, err := util.GetOwnerMachine(ctx, r.Client, m.ObjectMeta)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if ownerMachine == nil {
-			log.Info("Machine Controller has not yet set OwnerRef")
-			return ctrl.Result{}, nil
-		}
-		if !ownerMachine.ObjectMeta.DeletionTimestamp.IsZero() {
-			continue
-		}
-		clusterName := ownerMachine.ObjectMeta.Labels[clusterv1.MachineClusterLabelName]
-		if _, ok := clusterCapacities[clusterName]; !ok {
-			clusterCapacities[clusterName] = map[string]int{}
-		}
-		clusterCapacities[clusterName][m.Spec.Pool]++
-	}
-
-	// Fetch the owner Machine.
-	ownerMachine, err := util.GetOwnerMachine(ctx, r.Client, infraMachine.ObjectMeta)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if ownerMachine == nil {
-		log.Info("Machine Controller has not yet set OwnerRef")
-		return ctrl.Result{}, nil
-	}
-
-	// Fetch the owner Cluster.
-	ownerCluster, err := util.GetClusterFromMetadata(ctx, r.Client, ownerMachine.ObjectMeta)
-	if err != nil {
-		log.Info("Machine is missing cluster label or cluster does not exist")
-		return ctrl.Result{}, nil
-	}
-
-	// List all machines to match to pools
-	// machineList := &infrav1.AzureManagedMachineList{}
-	// if err := r.List(ctx, machineList, client.MatchingLabels(map[string]string{
-	// 	clusterv1.MachineClusterLabelName: ownerCluster.Name,
-	// })); err != nil {
-	// 	log.Info("failed to get machine list from api server")
-	// 	return ctrl.Result{}, err
-	// }
-
-	// capacity := int32(len(machineList.Items))
-	// _ = capacity
-
-	// Fetch the AzureManagedCluster
-	infraCluster := &infrav1.AzureManagedCluster{}
-	infraClusterName := client.ObjectKey{
-		Namespace: infraMachine.Namespace,
-		Name:      ownerCluster.Spec.InfrastructureRef.Name,
-	}
-
-	if err := r.Client.Get(ctx, infraClusterName, infraCluster); err != nil {
-		log.Info("infra cluster is not available yet")
-		return ctrl.Result{}, nil
-	}
-
-	// Fetch AKS cluster
-	managedClusterService, err := NewManagedClustersClient(infraCluster.Spec.SubscriptionID)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	aksCluster, err := managedClusterService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
-	if err != nil && !aksCluster.IsHTTPStatus(http.StatusNotFound) {
-		return ctrl.Result{}, err
-	}
-
-	litter.Dump(clusterCapacities)
-
-	// Convert infra CRD to AKS managed cluster
-	desiredAksCluster, err := convertCRDToAzure(infraCluster)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	litter.Dump(infraCluster.Spec)
-	litter.Dump(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)
-
-	// We provision node pools lazily: first a user adds a node pool to the AzureManagedCluster object,
-	// and once a pool exists there they may target it with newly created machines.
-	// Machines targeting non-existent node pools will be ignored.
-	// Node pools with zero nodes will be deleted, except if the primary pool would be deleted while other nodes remain.
-	n := 0
-	for index, pool := range *desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles {
-		count := int32(clusterCapacities[ownerCluster.Name][*pool.Name])
-		fmt.Printf("count: %d\n", count)
-		(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[index].Count = &count
-		if count > 0 {
-			(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[n] = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[index]
-			n++
-		}
-	}
-	*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[:n]
-	litter.Dump(*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)
-
-	// If we didn't find any corrsponding AKS cluster, pick a node pool as default and create the cluster.
-	// We'll add the rest after initial provisioning. We need to know the default to prevent deletion of
-	// all nodes in the default pool.
-	if aksCluster.IsHTTPStatus(http.StatusNotFound) {
-		log.Info("creating not-found cluster")
-		*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[:1]
-		_, err = managedClusterService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, desiredAksCluster)
-		return ctrl.Result{Requeue: true}, err
-	}
-
-	// Patch status with default node pool to prevent deletion later.
-	statusPatch := infraCluster.DeepCopy()
-	statusPatch.Status.DefaultNodePool = (*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles)[0].Name
-	if err := r.Status().Patch(ctx, infraCluster, client.MergeFrom(statusPatch)); err != nil {
-		return ctrl.Result{}, nil
-	}
-
-	if !isFinished(aksCluster.ProvisioningState) {
-		log.Info("requeueing to wait for azure provisioning")
-		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
-	}
-
-	log.Info("normalizing found cluster for comparison")
-	normalized := normalize(aksCluster)
-
-	agentPools := *desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles
-	// *desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = *aksCluster.ManagedClusterProperties.AgentPoolProfiles
-
-	log.Info("diffing normalized found cluster with desired")
-	ignored := []cmp.Option{
-		cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.ServicePrincipalProfile"),
-		cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.AgentPoolProfiles"),
-	}
-	diff := cmp.Diff(desiredAksCluster, normalized, ignored...)
-	if diff != "" {
-		fmt.Printf("update required (+new -old):\n%s", diff)
-		log.Info("applying update to existing cluster")
-		future, err := managedClusterService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, desiredAksCluster)
-		if err != nil {
-			log.Error(err, "failed update managed cluster")
-		}
-		if err := future.WaitForCompletionRef(ctx, managedClusterService.Client); err != nil {
-			log.Error(err, "error completing cluster operation")
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, err
-	}
-
-	log.Info("normalized and desired managed cluster matched, no update needed (go-cmp)")
-
-	log.Info("comparing with updated agent pools")
-	*desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = agentPools
-	if diff := cmp.Diff(desiredAksCluster, normalized, ignored[:1]...); diff != "" {
-		fmt.Printf("update required (+new -old):\n%s", diff)
-		log.Info("applying update to existing cluster")
-		agentPoolService, err := NewAgentPoolsClient(infraCluster.Spec.SubscriptionID)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		for _, agentPool := range *desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles {
-			newPool := containerservice.AgentPool{
-				ManagedClusterAgentPoolProfileProperties: &containerservice.ManagedClusterAgentPoolProfileProperties{
-					Count:   agentPool.Count,
-					VMSize:  agentPool.VMSize,
-					MaxPods: agentPool.MaxPods,
-					Type:    containerservice.VirtualMachineScaleSets,
-				},
-			}
-			future, err := agentPoolService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, *agentPool.Name, newPool)
-			if err != nil {
-				log.Error(err, "err starting operation")
-				return ctrl.Result{}, err
-			}
-			if err := future.WaitForCompletionRef(ctx, agentPoolService.Client); err != nil {
-				log.Error(err, "error completing operation")
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-	log.Info("normalized and desired agent pools matched, no update needed (go-cmp)")
-
-	return ctrl.Result{}, nil
+	return reconcileMachine(ctx, log, r.Client, r.Scheme, req)
 }
 
 func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -246,76 +61,16 @@ func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Complete(r)
 }
 
-/*
-	Approximation of reconcile procedure:
-
-	fn reconcile(req) (result, err) {
-		machine := getInfraMachine(req)
-		cluster := getInfraClusterForMachine(machine)
-
-		aks_have := getManagedCluster()
-		aks_want := makeManagedCluster(cluster)
-
-		if !exists(aks_have) {
-			// Remove all but first node pool for creation
-			aks_want.pools = aks_want.pools[:1]
-			create(aks_want)
-		}
-
-		pool_diff = differ(aks_have.pools, aks_want.pools)
-
-		if !differ(aks_have, aks_want) {
-			return
-		}
-
-		if !pool_diff {
-			// Only update top level cluster properties the first time around
-			aks_want.pools = aks_have.pools
-			update(aks_want)
-		}
-
-		grow, delete, err := makePools(aks_want.pool, aks_have.pools)
-		for pool in grow:
-			grow(pool)
-
-		for pool in delete:
-			if !default(pool) {
-				delete(pool)
-			}
-
-		nodes := getNodes()
-	}
-
-	fn reconcile(req) (res, err) {
-		machine := getMachine(req)
-		cluster := getClusterForMachine(machine) // use owner ref to get machine, then label to get cluster
-		pool := getPoolForMachine(machine) // machine.Pool is the name already
-
-		operation := getOperation(pool, machine)
-		switch operation {
-		case provision:
-			provision(cluster, pool)
-		case grow:
-		  	grow(cluster, pool)
-		case delete:
-		  	delete(cluster, pool)
-		case prune:
-			prune(cluster, pool, machine)
-		default:
-			return nil, err
-		}
-	}
-*/
-
-func getMachine(ctx context.Context, log logr.Logger, kubeclient client.Client, req ctrl.Request, machine *infrav1.AzureManagedMachine) (finish bool, err error) {
-	if machine == nil {
-		machine = &infrav1.AzureManagedMachine{}
-	}
+func getInfraMachine(ctx context.Context, log logr.Logger, kubeclient client.Client, req ctrl.Request) (*infrav1.AzureManagedMachine, error) {
+	machine := &infrav1.AzureManagedMachine{}
 	if err := kubeclient.Get(ctx, req.NamespacedName, machine); err != nil {
 		log.Info("failed to get infra machine from api server")
-		return apierrs.IsNotFound(err), client.IgnoreNotFound(err)
+		if apierrs.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return false, nil
+	return machine, nil
 }
 
 func getOwnerMachine(ctx context.Context, log logr.Logger, kubeclient client.Client, machine *infrav1.AzureManagedMachine) (*clusterv1.Machine, error) {
@@ -329,19 +84,11 @@ func getOwnerMachine(ctx context.Context, log logr.Logger, kubeclient client.Cli
 	return ownerMachine, nil
 }
 
-func getClusterForMachine(ctx context.Context, log logr.Logger, kubeclient client.Client, machine *infrav1.AzureManagedMachine) (*clusterv1.Cluster, error) {
-	// Fetch the owner Machine.
-	ownerMachine, err := getOwnerMachine(ctx, log, kubeclient, machine)
-	if err != nil {
-		return nil, err
-	}
-
-	// Fetch the owner Cluster.
+func getClusterForMachine(ctx context.Context, log logr.Logger, kubeclient client.Client, ownerMachine *clusterv1.Machine) (*clusterv1.Cluster, error) {
 	ownerCluster, err := util.GetClusterFromMetadata(ctx, kubeclient, ownerMachine.ObjectMeta)
 	if err != nil {
 		return nil, errors.Wrap(err, "Machine is missing cluster label or cluster does not exist")
 	}
-
 	return ownerCluster, nil
 }
 
@@ -360,39 +107,592 @@ func getInfraCluster(ctx context.Context, log logr.Logger, kubeclient client.Cli
 	return infraCluster, nil
 }
 
-func getAzureCluster(ctx context.Context, log logr.Logger, kubeclient client.Client, cluster *clusterv1.Cluster, machine *infrav1.AzureManagedMachine) (containerservice.ManagedCluster, error) {
-	infraCluster, err := getInfraCluster(ctx, log, kubeclient, cluster, machine)
+func findNodeForMachine(nodes []corev1.Node, infraMachine *infrav1.AzureManagedMachine) *corev1.Node {
+	var chosen *corev1.Node
+	for _, node := range nodes {
+		machineName, ok := node.Labels["azure.managed.infrastructure.cluster.x-k8s.io/machine-name"]
+		if !ok || machineName == infraMachine.Name {
+			chosen = node.DeepCopy()
+		}
+	}
+	return chosen
+}
+
+func mapNodeToMachine(ctx context.Context, log logr.Logger, kubeclient, remoteclient client.Client, node *corev1.Node, machine *infrav1.AzureManagedMachine) error {
+	node.Labels["azure.managed.infrastructure.cluster.x-k8s.io/machine-name"] = machine.Name
+	node.Labels["azure.managed.infrastructure.cluster.x-k8s.io/pool-name"] = machine.Spec.Pool
+	if err := remoteclient.Update(ctx, node); err != nil {
+		return err
+	}
+	machine.Spec.ProviderID = &node.Spec.ProviderID
+	if err := kubeclient.Update(ctx, machine); err != nil {
+		return err
+	}
+	machine.Status.Ready = true
+	if err := kubeclient.Status().Update(ctx, machine); err != nil {
+		return err
+	}
+	return nil
+}
+
+// NewClusterClient returns a Client for interacting with a remote Cluster using the given scheme for encoding and decoding objects.
+func NewClusterClient(c client.Client, cluster *clusterv1.Cluster, scheme *runtime.Scheme) (client.Client, error) {
+	restConfig, err := RESTConfig(c, cluster)
 	if err != nil {
-		return containerservice.ManagedCluster{}, err
+		return nil, err
+	}
+	mapper, err := apiutil.NewDynamicRESTMapper(restConfig, apiutil.WithLazyDiscovery)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create a DynamicRESTMapper for Cluster %s/%s", cluster.Namespace, cluster.Name)
+	}
+	ret, err := client.New(restConfig, client.Options{
+		// Scheme: scheme,
+		Mapper: mapper,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create client for Cluster %s/%s", cluster.Namespace, cluster.Name)
+	}
+
+	return ret, nil
+}
+
+// RESTConfig returns a configuration instance to be used with a Kubernetes client.
+func RESTConfig(c client.Client, cluster *clusterv1.Cluster) (*rest.Config, error) {
+	kubeConfig, err := kcfg.FromSecret(c, cluster)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to retrieve kubeconfig secret for Cluster %s/%s", cluster.Namespace, cluster.Name)
+	}
+
+	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeConfig)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create REST configuration for Cluster %s/%s", cluster.Namespace, cluster.Name)
+	}
+
+	return restConfig, nil
+}
+
+func reconcileMachine(ctx context.Context, logger logr.Logger, kubeclient client.Client, scheme *runtime.Scheme, req ctrl.Request) (ctrl.Result, error) {
+	log := logger.WithValues("azuremanagedmachine", req.NamespacedName)
+	_ = log
+
+	infraMachine, err := getInfraMachine(ctx, log, kubeclient, req)
+	if err != nil || infraMachine == nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := addFinalizer(ctx, kubeclient, infraMachine); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	ownerMachine, err := getOwnerMachine(ctx, log, kubeclient, infraMachine)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	ownerCluster, err := getClusterForMachine(ctx, log, kubeclient, ownerMachine)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	infraCluster, err := getInfraCluster(ctx, log, kubeclient, ownerCluster, infraMachine)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !hasPool(infraCluster, infraMachine.Spec.Pool) {
+		log.Info("infra machine must reference pool which exists in cluster definition, won't requeue.")
+		return ctrl.Result{}, nil
 	}
 
 	managedClusterService, err := NewManagedClustersClient(infraCluster.Spec.SubscriptionID)
 	if err != nil {
-		return containerservice.ManagedCluster{}, err
+		return ctrl.Result{}, err
 	}
 
-	aksCluster, err := managedClusterService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
-	return aksCluster, err
+	azureCluster, err := managedClusterService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
+	if err != nil && !azureCluster.IsHTTPStatus(http.StatusNotFound) {
+		return ctrl.Result{}, err
+	}
+
+	agentPoolsService, err := NewAgentPoolsClient(infraCluster.Spec.SubscriptionID)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	done, err := ensureCluster(ctx, log, kubeclient, infraCluster, infraMachine, ownerCluster, azureCluster)
+	if err != nil || !done {
+		return ctrl.Result{Requeue: !done}, err
+	}
+
+	log.Info("setting api endpoints")
+	if err := setAPIEndpoints(ctx, kubeclient, azureCluster, infraCluster); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !infraMachine.DeletionTimestamp.IsZero() {
+		done, err := removeAzureMachine(ctx, *infraMachine.Spec.ProviderID)
+		if err != nil || !done {
+			return ctrl.Result{Requeue: !done}, err
+		}
+		return ctrl.Result{}, removeFinalizer(ctx, kubeclient, infraMachine)
+	}
+
+	if infraMachine.Spec.ProviderID != nil {
+		return ctrl.Result{}, nil
+	}
+
+	azurePool, err := agentPoolsService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, infraMachine.Spec.Pool)
+	if err != nil && !azurePool.IsHTTPStatus(http.StatusNotFound) {
+		return ctrl.Result{}, err
+	}
+
+	done, err = ensurePool(ctx, log, infraCluster, infraMachine, azurePool)
+	if err != nil || !done {
+		return ctrl.Result{Requeue: !done}, err
+	}
+
+	remoteClient, err := NewClusterClient(kubeclient, ownerCluster, scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	nodes, err := getNodes(ctx, kubeclient, ownerCluster, scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	nodesInPool := getNodesInPool(nodes, infraMachine.Spec.Pool)
+
+	resourceGroup, err := getResourceGroupForNode(nodes[0])
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	vmssList, err := getVMSSForCluster(ctx, infraCluster.Spec.SubscriptionID, resourceGroup)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	vmss, err := getVMSSForPool(vmssList, infraMachine.Spec.Pool)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	node := findNodeForMachine(nodesInPool, infraMachine)
+
+	if node == nil {
+		// If the number of Kubernetes nodes in this pool is less than the expected VMSS capacity, wait to add a node until stabilization.
+		if len(nodesInPool) == int(*vmss.Sku.Capacity) {
+			if err := addAzureMachine(ctx, infraCluster.Spec.SubscriptionID, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, infraMachine.Spec.Pool, azurePool); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return ctrl.Result{}, mapNodeToMachine(ctx, log, kubeclient, remoteClient, node, infraMachine)
 }
 
-func getPeerMachines(ctx context.Context, log logr.Logger, kubeclient client.Client, cluster, pool string) error {
-	machineList := &infrav1.AzureManagedMachineList{}
-
-	opts := client.MatchingLabels(map[string]string{
-		clusterv1.MachineClusterLabelName: cluster,
-	})
-
-	if err := kubeclient.List(ctx, machineList, opts); err != nil {
-		return errors.Wrap(err, "failed to get machine list from api server")
+func ensureCluster(ctx context.Context, logger logr.Logger, kubeclient client.Client, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine, ownerCluster *clusterv1.Cluster, azureCluster containerservice.ManagedCluster) (done bool, err error) {
+	desiredAksCluster, err := convertCRDToAzure(infraCluster)
+	if err != nil {
+		return false, err
 	}
 
-	n := 0
-	for _, machine := range machineList.Items {
-		if machine.Spec.Pool == pool {
-			machineList.Items[n] = machine
-			n++
+	managedClusterService, err := NewManagedClustersClient(infraCluster.Spec.SubscriptionID)
+	if err != nil {
+		return false, err
+	}
+
+	if azureCluster.IsHTTPStatus(http.StatusNotFound) {
+		log.Info("creating corresponding cluster with single default node pool in azure")
+		infraPool := getPool(infraCluster, infraMachine.Spec.Pool)
+		machinePools := makeMachinePools([]infrav1.AzureMachinePoolSpec{*infraPool})
+		desiredAksCluster.ManagedClusterProperties.AgentPoolProfiles = machinePools
+		_, err = managedClusterService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, desiredAksCluster)
+		return false, err
+	}
+
+	if !isFinished(azureCluster.ProvisioningState) {
+		return false, nil
+	}
+
+	credentialList, err := managedClusterService.ListClusterAdminCredentials(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
+	if err != nil {
+		return false, err
+	}
+
+	if credentialList.Kubeconfigs == nil || len(*credentialList.Kubeconfigs) < 1 {
+		return false, errors.New("no kubeconfigs available for the aks cluster")
+	}
+
+	// data, err := base64.StdEncoding.EncodeToString()
+	// if err != nil {
+	// 	return false, err
+	// }
+
+	kubeconfig := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secret.Name(ownerCluster.Name, secret.Kubeconfig),
+			Namespace: ownerCluster.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: clusterv1.GroupVersion.String(),
+					Kind:       "ownerCluster",
+					Name:       ownerCluster.Name,
+					UID:        ownerCluster.UID,
+				},
+			},
+		},
+	}
+
+	litter.Dump(kubeconfig.Data[secret.KubeconfigDataName])
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, kubeclient, kubeconfig, func() error {
+		kubeconfig.Data = map[string][]byte{
+			secret.KubeconfigDataName: []byte(*(*credentialList.Kubeconfigs)[0].Value),
+		}
+		return nil
+	}); err != nil {
+		log.Info("failed to create or update kubeconfig")
+		return false, err
+	}
+
+	log.Info("normalizing found cluster for comparison")
+	normalized := normalize(azureCluster)
+
+	ignored := []cmp.Option{
+		cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.ServicePrincipalProfile"),
+		cmpopts.IgnoreFields(containerservice.ManagedCluster{}, "ManagedClusterProperties.AgentPoolProfiles"),
+	}
+
+	diff := cmp.Diff(desiredAksCluster, normalized, ignored...)
+	if diff == "" {
+		log.Info("normalized and desired managed cluster matched, no update needed (go-cmp)")
+		return true, nil
+	}
+	fmt.Printf("update required (+new -old):\n%s", diff)
+
+	log.Info("applying update to existing cluster")
+	future, err := managedClusterService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, desiredAksCluster)
+	if err != nil {
+		log.Error(err, "failed update managed cluster")
+		return false, err
+	}
+	if err := future.WaitForCompletionRef(ctx, managedClusterService.Client); err != nil {
+		log.Error(err, "error completing cluster operation")
+		return false, err
+	}
+
+	return true, nil
+}
+
+func ensurePool(ctx context.Context, logger logr.Logger, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine, azurePool containerservice.AgentPool) (done bool, err error) {
+	if !isFinished(azurePool.ProvisioningState) {
+		return false, nil
+	}
+
+	agentPoolsService, err := NewAgentPoolsClient(infraCluster.Spec.SubscriptionID)
+	if err != nil {
+		return false, err
+	}
+
+	infraPool := getPool(infraCluster, infraMachine.Spec.Pool)
+	want := makeMachinePool(*infraPool)
+	count := int32(1)
+	want.Count = &count
+	newPool := containerservice.AgentPool{
+		ManagedClusterAgentPoolProfileProperties: &containerservice.ManagedClusterAgentPoolProfileProperties{
+			Count:   want.Count,
+			VMSize:  want.VMSize,
+			MaxPods: want.MaxPods,
+			Type:    containerservice.VirtualMachineScaleSets,
+		},
+	}
+
+	if azurePool.IsHTTPStatus(http.StatusNotFound) {
+		_, err = agentPoolsService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, infraMachine.Spec.Pool, newPool)
+		return false, err
+	}
+
+	if diff := cmp.Diff(azurePool.VMSize, newPool.VMSize); diff != "" {
+		fmt.Printf("update required (+new -old):\n%s", diff)
+		future, err := agentPoolsService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, infraPool.Name, newPool)
+		if err != nil {
+			log.Error(err, "err starting operation")
+			return false, err
+		}
+		if err := future.WaitForCompletionRef(ctx, agentPoolsService.Client); err != nil {
+			log.Error(err, "error completing operation")
+			return false, err
 		}
 	}
-	machineList.Items = machineList.Items[:n]
+
+	return true, nil
+}
+
+func addFinalizer(ctx context.Context, kubeclient client.Client, machine *infrav1.AzureManagedMachine) error {
+	if !stringslice.Has(machine.Finalizers, clusterv1.MachineFinalizer) {
+		machine.Finalizers = append(machine.Finalizers, clusterv1.MachineFinalizer)
+		if err := kubeclient.Update(ctx, machine); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func removeFinalizer(ctx context.Context, kubeclient client.Client, machine *infrav1.AzureManagedMachine) error {
+	for idx, val := range machine.Finalizers {
+		if val == clusterv1.MachineFinalizer {
+			machine.Finalizers = append(machine.Finalizers[:idx], machine.Finalizers[idx+1:]...)
+			if err := kubeclient.Update(ctx, machine); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// TODO(ace): consider switching to a map. Do we *need* ordering guarantees provided by an array?
+func getPool(infraCluster *infrav1.AzureManagedCluster, name string) *infrav1.AzureMachinePoolSpec {
+	for _, pool := range infraCluster.Spec.NodePools {
+		if pool.Name == name {
+			return &pool
+		}
+	}
+	return nil
+}
+
+// TODO(ace): consider switching to a map. Do we *need* ordering guarantees provided by an array?
+func hasPool(infraCluster *infrav1.AzureManagedCluster, pool string) bool {
+	for _, got := range infraCluster.Spec.NodePools {
+		if got.Name == pool {
+			return true
+		}
+	}
+	return false
+}
+
+func getNodes(ctx context.Context, kubeclient client.Client, ownerCluster *clusterv1.Cluster, scheme *runtime.Scheme) ([]corev1.Node, error) {
+	clusterClient, err := NewClusterClient(kubeclient, ownerCluster, scheme)
+	if err != nil {
+		return nil, err
+	}
+
+	nodeList := &corev1.NodeList{}
+	if clusterClient.List(ctx, nodeList); err != nil {
+		return nil, err
+	}
+
+	return nodeList.Items, nil
+}
+
+func getVMSSForCluster(ctx context.Context, subscription, resourceGroup string) ([]compute.VirtualMachineScaleSet, error) {
+	vmssService, err := NewVirtualMachineScaleSetsClient(subscription)
+	if err != nil {
+		return nil, err
+	}
+
+	iterator, err := vmssService.ListComplete(ctx, resourceGroup)
+	list := []compute.VirtualMachineScaleSet{}
+	for iterator.NotDone() {
+		vmss := iterator.Value()
+		list = append(list, vmss)
+		if err := iterator.NextWithContext(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return list, nil
+}
+
+func getVMSSForPool(list []compute.VirtualMachineScaleSet, name string) (compute.VirtualMachineScaleSet, error) {
+	for _, vmss := range list {
+		tag, ok := vmss.Tags["poolName"]
+		if !ok {
+			return compute.VirtualMachineScaleSet{}, errors.New("vmss did not have tag for pool name")
+		}
+		if *tag == name {
+			return vmss, nil
+		}
+	}
+	return compute.VirtualMachineScaleSet{}, errors.New("could not find vmss with tag matching pool name")
+}
+
+func getResourceGroupForNode(node corev1.Node) (string, error) {
+	tokens, err := tokenizeProviderID(node.Spec.ProviderID)
+	if err != nil {
+		return "", nil
+	}
+	return tokens[3], nil
+}
+
+func tokenizeProviderID(providerID string) ([]string, error) {
+	pair := strings.Split(providerID, ":")
+	if len(pair) < 2 {
+		return nil, errors.New("provider id must have format {provider}:///{provider_id_value}")
+	}
+
+	tokens := strings.Split(pair[1], "/")
+	// 13 == 3 spaces for leading triple slash, plus 10 tokens to describe a VMSS instance ID
+	if len(tokens) != 13 {
+		return nil, errors.New("expected 10 slash-separated components in azure vmss instance id, plus leading triple slash")
+	}
+
+	tokens = tokens[3:]
+	return tokens, nil
+}
+
+func getNodesInPool(nodes []corev1.Node, pool string) []corev1.Node {
+	result := []corev1.Node{}
+	for _, node := range nodes {
+		val := node.Labels["agentpool"]
+		if val == pool {
+			result = append(result, node)
+		}
+	}
+	return result
+}
+
+func addAzureMachine(ctx context.Context, subscription, resourceGroup, resourceName, poolName string, azurePool containerservice.AgentPool) error {
+	agentPoolsService, err := NewAgentPoolsClient(subscription)
+	if err != nil {
+		return err
+	}
+
+	*azurePool.Count++
+
+	_, err = agentPoolsService.CreateOrUpdate(ctx, resourceGroup, resourceName, poolName, azurePool)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func removeAzureMachine(ctx context.Context, providerID string) (done bool, err error) {
+	tokens, err := tokenizeProviderID(providerID)
+	if err != nil {
+		return false, err
+	}
+
+	subscription, resourceGroup, vmss, instance := tokens[1], tokens[3], tokens[7], tokens[9]
+
+	vmInstanceService, err := NewVirtualMachineScaleSetVMsClient(subscription)
+	if err != nil {
+		return false, err
+	}
+
+	future, err := vmInstanceService.Delete(ctx, resourceGroup, vmss, instance)
+	if err != nil {
+		if res := future.Response(); res != nil && res.StatusCode == http.StatusNotFound {
+			return true, nil
+		}
+		return false, err
+	}
+
+	found, err := vmInstanceService.Get(ctx, resourceGroup, vmss, instance, "")
+	if err != nil && found.IsHTTPStatus(http.StatusNotFound) {
+		return true, nil
+	}
+
+	return false, err
+}
+
+func setAPIEndpoints(ctx context.Context, kubeclient client.Client, azureCluster containerservice.ManagedCluster, infraCluster *infrav1.AzureManagedCluster) error {
+	merge := infraCluster.DeepCopy()
+	merge.Status.APIEndpoints = []infrav1.APIEndpoint{
+		{
+			Host: *azureCluster.ManagedClusterProperties.Fqdn,
+			Port: 443,
+		},
+	}
+	return kubeclient.Status().Patch(ctx, infraCluster, client.MergeFrom(merge))
+}
+
+/*
+	fn reconcile(req) (res, err) {
+		infra machine
+		if deleting -> delete
+		if cluster doesn't exist, create with this node in pool
+		set cluster api endpoints on infra cluster
+		if pool doesn't exist, create with 1 node
+		if free node in pool, assign to machine
+		if nodes == expected, increment vmss size
+	}
+*/
+
+func reconcileCluster(ctx context.Context, log logr.Logger, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine) (done bool, err error) {
+	var pool *infrav1.AzureMachinePoolSpec
+	for idx, candidate := range infraCluster.Spec.NodePools {
+		if candidate.Name == infraMachine.Spec.Pool {
+			pool = &infraCluster.Spec.NodePools[idx]
+			break
+		}
+	}
+
+	if pool == nil {
+		log.Info("pool not found in cluster for infra machine, will not requeue")
+		return true, nil
+	}
+
+	managedClusterService, err := NewManagedClustersClient(infraCluster.Spec.SubscriptionID)
+	if err != nil {
+		return false, err
+	}
+
+	azureCluster, err := managedClusterService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
+	if err != nil && !azureCluster.IsHTTPStatus(http.StatusNotFound) {
+		return false, err
+	}
+
+	if azureCluster.IsHTTPStatus(http.StatusNotFound) {
+		azureClusterWant, err := makeAzureCluster(infraCluster)
+		if err != nil {
+			return false, nil
+		}
+		azureClusterWant.ManagedClusterProperties.AgentPoolProfiles = &[]containerservice.ManagedClusterAgentPoolProfile{
+			containerservice.ManagedClusterAgentPoolProfile{
+				VMSize: containerservice.VMSizeTypes(pool.SKU),
+				Type:   containerservice.VirtualMachineScaleSets,
+				Name:   &pool.Name,
+				Count:  to.Int32Ptr(1),
+			},
+		}
+		_, err = managedClusterService.CreateOrUpdate(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, azureClusterWant)
+		return false, err
+	}
+
+	return true, nil
+}
+
+func makeAzureCluster(infraCluster *infrav1.AzureManagedCluster) (containerservice.ManagedCluster, error) {
+	settings, err := auth.GetSettingsFromFile()
+	if err != nil {
+		return containerservice.ManagedCluster{}, err
+	}
+	return containerservice.ManagedCluster{
+		Name:     &infraCluster.Spec.Name,
+		Location: &infraCluster.Spec.Location,
+		ManagedClusterProperties: &containerservice.ManagedClusterProperties{
+			KubernetesVersion: &infraCluster.Spec.Version,
+			DNSPrefix:         &infraCluster.Spec.Name,
+			LinuxProfile: &containerservice.LinuxProfile{
+				AdminUsername: to.StringPtr("azureuser"),
+				SSH: &containerservice.SSHConfiguration{
+					PublicKeys: &[]containerservice.SSHPublicKey{{KeyData: &infraCluster.Spec.SSHPublicKey}},
+				},
+			},
+			ServicePrincipalProfile: &containerservice.ManagedClusterServicePrincipalProfile{
+				ClientID: to.StringPtr(settings.Values[auth.ClientID]),
+				Secret:   to.StringPtr(settings.Values[auth.ClientSecret]),
+			},
+		},
+	}, nil
+}
+
+func makeAzureMachinePool(name, sku string) containerservice.ManagedClusterAgentPoolProfile {
+	return containerservice.ManagedClusterAgentPoolProfile{
+		VMSize: containerservice.VMSizeTypes(sku),
+		Type:   containerservice.VirtualMachineScaleSets,
+		Name:   &name,
+	}
 }
