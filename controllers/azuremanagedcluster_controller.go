@@ -34,7 +34,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const finalizer = "azuremanagedclusters.infrastructure.cluster.x-k8s.io"
@@ -69,11 +68,11 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	// Fetch the Cluster.
 	ownerCluster, err := util.GetOwnerCluster(ctx, r.Client, cluster.ObjectMeta)
 	if err != nil {
-		return reconcile.Result{}, err
+		return ctrl.Result{}, err
 	}
 	if ownerCluster == nil {
 		log.Info("Cluster Controller has not yet set OwnerRef")
-		return reconcile.Result{}, nil
+		return ctrl.Result{}, nil
 	}
 
 	log = log.WithValues("cluster", ownerCluster.Name)
@@ -359,7 +358,7 @@ func decorateFailure(log logr.Logger) logr.Logger {
 
 func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedClustersClient, error) {
 	client := containerservice.NewManagedClustersClient(subscriptionID)
-	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+	if err := addUserAgent(&client.Client); err != nil {
 		return containerservice.ManagedClustersClient{}, err
 	}
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
@@ -367,14 +366,12 @@ func NewManagedClustersClient(subscriptionID string) (containerservice.ManagedCl
 		return containerservice.ManagedClustersClient{}, err
 	}
 	client.Authorizer = authorizer
-	// client.RequestInspector = LogRequest()
-	// client.ResponseInspector = LogResponse()
 	return client, nil
 }
 
 func NewAgentPoolsClient(subscriptionID string) (containerservice.AgentPoolsClient, error) {
 	client := containerservice.NewAgentPoolsClient(subscriptionID)
-	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+	if err := addUserAgent(&client.Client); err != nil {
 		return containerservice.AgentPoolsClient{}, err
 	}
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
@@ -382,14 +379,12 @@ func NewAgentPoolsClient(subscriptionID string) (containerservice.AgentPoolsClie
 		return containerservice.AgentPoolsClient{}, err
 	}
 	client.Authorizer = authorizer
-	// client.RequestInspector = LogRequest()
-	// client.ResponseInspector = LogResponse()
 	return client, nil
 }
 
 func NewVirtualMachineScaleSetVMsClient(subscriptionID string) (compute.VirtualMachineScaleSetVMsClient, error) {
 	client := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
-	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+	if err := addUserAgent(&client.Client); err != nil {
 		return compute.VirtualMachineScaleSetVMsClient{}, err
 	}
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
@@ -397,14 +392,12 @@ func NewVirtualMachineScaleSetVMsClient(subscriptionID string) (compute.VirtualM
 		return compute.VirtualMachineScaleSetVMsClient{}, err
 	}
 	client.Authorizer = authorizer
-	client.RequestInspector = LogRequest()
-	client.ResponseInspector = LogResponse()
 	return client, nil
 }
 
 func NewVirtualMachineScaleSetsClient(subscriptionID string) (compute.VirtualMachineScaleSetsClient, error) {
 	client := compute.NewVirtualMachineScaleSetsClient(subscriptionID)
-	if err := client.AddToUserAgent("cluster-api-provider-aks"); err != nil {
+	if err := addUserAgent(&client.Client); err != nil {
 		return compute.VirtualMachineScaleSetsClient{}, err
 	}
 	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
@@ -412,13 +405,21 @@ func NewVirtualMachineScaleSetsClient(subscriptionID string) (compute.VirtualMac
 		return compute.VirtualMachineScaleSetsClient{}, err
 	}
 	client.Authorizer = authorizer
-	client.RequestInspector = LogRequest()
-	client.ResponseInspector = LogResponse()
+
 	return client, nil
 }
 
-// LogRequest logs full autorest requests for any Azure client.
-func LogRequest() autorest.PrepareDecorator {
+func addUserAgent(client *autorest.Client) error {
+	return client.AddToUserAgent("cluster-api-provider-aks")
+}
+
+func addDebug(client *autorest.Client) {
+	client.RequestInspector = logRequest()
+	client.ResponseInspector = logResponse()
+}
+
+// logRequest logs full autorest requests for any Azure client.
+func logRequest() autorest.PrepareDecorator {
 	return func(p autorest.Preparer) autorest.Preparer {
 		return autorest.PreparerFunc(func(r *http.Request) (*http.Request, error) {
 			r, err := p.Prepare(r)
@@ -432,8 +433,8 @@ func LogRequest() autorest.PrepareDecorator {
 	}
 }
 
-// LogResponse logs full autorest responses for any Azure client.
-func LogResponse() autorest.RespondDecorator {
+// logResponse logs full autorest responses for any Azure client.
+func logResponse() autorest.RespondDecorator {
 	return func(p autorest.Responder) autorest.Responder {
 		return autorest.ResponderFunc(func(r *http.Response) error {
 			err := p.Respond(r)
