@@ -51,7 +51,7 @@ type AzureManagedMachineReconciler struct {
 func (r *AzureManagedMachineReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("azuremanagedmachine", req.NamespacedName)
-	return reconcile(ctx, log, r.Client, r.Scheme, req)
+	return ensure(ctx, log, r.Client, r.Scheme, req)
 }
 
 func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -72,7 +72,7 @@ func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 */
 
-func reconcile(ctx context.Context, log logr.Logger, kubeclient client.Client, scheme *runtime.Scheme, req ctrl.Request) (ctrl.Result, error) {
+func ensure(ctx context.Context, log logr.Logger, kubeclient client.Client, scheme *runtime.Scheme, req ctrl.Request) (ctrl.Result, error) {
 	log.Info("fetching infra machine")
 	infraMachine, err := getInfraMachine(ctx, kubeclient, req)
 	if err != nil || infraMachine == nil {
@@ -124,18 +124,15 @@ func reconcile(ctx context.Context, log logr.Logger, kubeclient client.Client, s
 		return ctrl.Result{}, err
 	}
 
+	clusterClient, err := NewClusterClient(kubeclient, ownerCluster, scheme)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	log.Info("reconciling machine")
-	done, err = reconcileMachine(ctx, kubeclient, ownerCluster, infraCluster, infraMachine, scheme)
+	done, err = reconcileMachine(ctx, kubeclient, clusterClient, infraCluster, infraMachine)
 	if err != nil || !done {
 		return ctrl.Result{Requeue: !done}, err
-	}
-
-	if err := kubeclient.Update(ctx, infraMachine); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := kubeclient.Status().Update(ctx, infraMachine); err != nil {
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -324,7 +321,7 @@ func reconcileKubeconfig(ctx context.Context, kubeclient client.Client, ownerClu
 	return nil
 }
 
-func reconcileMachine(ctx context.Context, kubeclient client.Client, ownerCluster *clusterv1.Cluster, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine, scheme *runtime.Scheme) (done bool, err error) {
+func reconcileMachine(ctx context.Context, kubeclient, clusterClient client.Client, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine) (done bool, err error) {
 	if !infraMachine.DeletionTimestamp.IsZero() {
 		done, err := removeAzureMachine(ctx, *infraMachine.Spec.ProviderID)
 		if err != nil || !done {
@@ -333,7 +330,7 @@ func reconcileMachine(ctx context.Context, kubeclient client.Client, ownerCluste
 		return true, removeFinalizer(ctx, kubeclient, infraMachine)
 	}
 
-	nodes, err := getNodes(ctx, kubeclient, ownerCluster, scheme)
+	nodes, err := getNodes(ctx, clusterClient)
 	if err != nil {
 		return false, err
 	}
@@ -347,6 +344,19 @@ func reconcileMachine(ctx context.Context, kubeclient client.Client, ownerCluste
 		node.Labels["azure.managed.infrastructure.cluster.x-k8s.io/pool-name"] = infraMachine.Spec.Pool
 		infraMachine.Spec.ProviderID = &node.Spec.ProviderID
 		infraMachine.Status.Ready = true
+
+		if err := clusterClient.Update(ctx, node); err != nil {
+			return false, err
+		}
+
+		if err := kubeclient.Update(ctx, infraMachine); err != nil {
+			return false, err
+		}
+
+		if err := kubeclient.Status().Update(ctx, infraMachine); err != nil {
+			return false, err
+		}
+
 		return true, nil
 	}
 
@@ -534,14 +544,9 @@ func hasPool(infraCluster *infrav1.AzureManagedCluster, pool string) bool {
 	return false
 }
 
-func getNodes(ctx context.Context, kubeclient client.Client, ownerCluster *clusterv1.Cluster, scheme *runtime.Scheme) ([]corev1.Node, error) {
-	clusterClient, err := NewClusterClient(kubeclient, ownerCluster, scheme)
-	if err != nil {
-		return nil, err
-	}
-
+func getNodes(ctx context.Context, kubeclient client.Client) ([]corev1.Node, error) {
 	nodeList := &corev1.NodeList{}
-	if clusterClient.List(ctx, nodeList); err != nil {
+	if err := kubeclient.List(ctx, nodeList); err != nil {
 		return nil, err
 	}
 
