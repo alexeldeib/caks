@@ -214,11 +214,6 @@ func reconcileMachine(ctx context.Context, logger logr.Logger, kubeclient client
 		return ctrl.Result{}, err
 	}
 
-	agentPoolsService, err := NewAgentPoolsClient(infraCluster.Spec.SubscriptionID)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	done, err := ensureCluster(ctx, log, kubeclient, infraCluster, infraMachine, ownerCluster, azureCluster)
 	if err != nil || !done {
 		return ctrl.Result{Requeue: !done}, err
@@ -239,6 +234,11 @@ func reconcileMachine(ctx context.Context, logger logr.Logger, kubeclient client
 
 	if infraMachine.Spec.ProviderID != nil {
 		return ctrl.Result{}, nil
+	}
+
+	agentPoolsService, err := NewAgentPoolsClient(infraCluster.Spec.SubscriptionID)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	azurePool, err := agentPoolsService.Get(ctx, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name, infraMachine.Spec.Pool)
