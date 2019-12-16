@@ -76,6 +76,32 @@ func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error
 		if free node in pool, assign to machine
 		if nodes == expected, increment vmss size
 	}
+
+	Reconcile begins by fetching all of the associated CRDs for this request:
+	- the infrastructure machine object which triggered this reconcile
+	- the upstream "generic" machine object which has an ownerRef on the infra machine
+	- the upstream cluster object indicated in the machine object metadata labels, in the same namespace as the machine
+	- the infrastructure cluster object specified by the infra ref of the upstream cluster
+
+	When we have all of these objects, we validate that infraMachine.Spec.Pool targets a pool
+	which is defined in the infraCluster.Spec.NodePools. Creating a machine translates into a request
+	to add a machine to the targeted agent pool in the AKS cluster.
+
+	Cluster creation is a bit tricky. It occurs lazily when the first machine is created.
+	The cluster reconcile loop is a no-op and stores a dummy secret in the cluster kubeconfig.
+	It also forces the upstream cluster status to ready, since with no control plane machines
+	the upstream controller will never set the ready status.
+
+	After cluster provisioning is complete, we search for a node in the correct agent pool
+	to map to the requested infraMachine.Spec.ProviderID. We claim the node by assigning a
+	label with the name of the machine.
+
+	If there are no available nodes in the given agent pool, we may decide to
+	add a new node via the Agent Pool API, but *only* if the number of workload
+	cluster nodes for this pool is equal to the expected number based on the Agent Pool API.
+	This is to avoid adding extra machines -- if we have 2 infra machines, 1 k8s nodes, and
+	do a Get on the Agent Pool API to see it has 2 machines, we should not attempt to add a
+	third machine until the second machine has registered as a node.
 */
 
 func (r *AzureManagedMachineReconciler) reconcile(req ctrl.Request) (ctrl.Result, error) {
