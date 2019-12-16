@@ -36,7 +36,18 @@ type AzureManagedClusterReconciler struct {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile ...
+/*
+	Cluster reconcile is effectively a no-op. It only does what is necessary so tha
+	the upstream cluster API controllers will continue progressing. All of the
+	real work will be done in the machine controller.
+
+	The cluster control sets three values to keep things moving along:
+	- infraCluster.Status.Ready = true
+	- ownerCluster.Status.Ready = true => this one is a hack because the upstream controller will not do it normally
+	- an empty kubeconfig secret with the correct name so capi upstream doesn't try to create one
+*/
+
+// Reconcile pretends to reconcile infrastructure for a Kubernetes cluster.
 func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("azuremanagedcluster", req.NamespacedName)
