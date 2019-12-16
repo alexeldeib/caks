@@ -31,7 +31,7 @@ jobs:
             arch=$(go env GOARCH)
             curl -sL https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/${os}/${arch} -o kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz
             sudo tar -xzf kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz -C /usr/local/kubebuilder --strip-components=1
-            curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl $(go env GOPATH)/bin/kubectl
+            curl -sL https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl -o $(go env GOPATH)/bin/kubectl
             which kustomize
             which controller-gen
             which kind
