@@ -13,6 +13,10 @@ jobs:
               GO111MODULE: on
           run: |
             set -eux
+            echo $PATH
+            which kustomize
+            which controller-gen
+            which kind
             KUBEBUILDER_VERSION=2.2.0
             KIND_VERSION=0.6.1
             KUSTOMIZE_VERSION=3.5.1
