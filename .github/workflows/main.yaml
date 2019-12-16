@@ -15,7 +15,7 @@ jobs:
           run: |
             set -eux
             KUBEBUILDER_VERSION=2.2.0
-            KIND_VERSION=0.6.1
+            KIND_VERSION=0.5.1
             KUSTOMIZE_VERSION=3.5.1
             CONTROLLER_GEN_VERSION=0.2.4
             export PATH=$PATH:/usr/local/kubebuilder/bin:$(go env GOPATH)/bin
