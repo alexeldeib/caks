@@ -4,7 +4,7 @@
 package controllers
 
 import (
-	"fmt"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -55,12 +55,10 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
 
-	app := os.Getenv("AZURE_CLIENT_ID")
-	key := os.Getenv("AZURE_CLIENT_SECRET")
-	tenant := os.Getenv("AZURE_TENANT_ID")
-	if app == "" || key == "" || tenant == "" {
-		Fail(fmt.Sprintf("must specify all of app, key, and tenant for client credential authentication, app: [ %s ], tenant: [ %s ], key length: [ %d ]", app, tenant, len(key)))
-	}
+	authFile := os.Getenv("AZURE_AUTH_FILE")
+	settings := map[string]string{}
+	err = json.Unmarshal([]byte(authFile), settings)
+	Expect(err).NotTo(HaveOccurred())
 
 	authorizer, err := auth.NewClientCredentialsConfig(app, key, tenant).Authorizer()
 	Expect(err).NotTo(HaveOccurred())
