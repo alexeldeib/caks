@@ -18,7 +18,7 @@ jobs:
             KIND_VERSION=0.6.1
             KUSTOMIZE_VERSION=3.5.1
             CONTROLLER_GEN_VERSION=0.2.4
-            export PATH=$PATH:/usr/local/kubebuilder/bin:$(go env GOPATH)/bin
+            export PATH=$(go env GOPATH)/bin:/usr/local/kubebuilder/bin:$PATH
             go env
             go version
             sudo mkdir -p /usr/local/kubebuilder
