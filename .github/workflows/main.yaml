@@ -40,7 +40,7 @@ jobs:
             which kustomize
             which controller-gen
             which kind
-            kind create cluster --verbosity 6
+            kind create cluster
             kind export kubeconfig 
             kubectl config view
             kubectl cluster-info
