@@ -2,6 +2,7 @@
 set -eux
 
 mkdir $GITHUB_WORKSPACE/bin
+cp /usr/local/bin/goimports $GITHUB_WORKSPACE/bin
 cp /usr/local/kubebuilder/bin/* $GITHUB_WORKSPACE/bin
 cp /usr/local/bin/controller-gen $GITHUB_WORKSPACE/bin
 cp /usr/local/bin/kustomize $GITHUB_WORKSPACE/bin
