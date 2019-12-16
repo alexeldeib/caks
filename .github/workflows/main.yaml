@@ -1,0 +1,45 @@
+name: test
+on:
+    # Trigger the workflow on push or pull request,
+    # but only for the master branch
+    push:
+        branches:
+        - master
+    pull_request:
+        branches:
+        - master
+jobs:
+    test:
+        name: test cluster api provider azure
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@master
+        - name: do
+            env:
+            AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+            GO111MODULE: on
+            run: |
+                set -eux
+                KUBEBUILDER_VERSION=2.2.0
+                KIND_VERSION=0.6.1
+                KUSTOMIZE_VERSION=3.5.1
+                CONTROLLER_GEN_VERSION=v0.2.4
+                export PATH=$PATH:/usr/local/kubebuilder/bin:$(go env GOPATH)/bin
+                go env
+                go version
+                sudo mkdir -p /usr/local/kubebuilder
+                go get golang.org/x/tools/cmd/goimports
+                go get github.com/onsi/ginkgo/ginkgo
+                go get sigs.k8s.io/kind@v${KIND_VERSION}
+                go get sigs.k8s.io/kustomize/kustomize/v3@v${KUSTOMIZE_VERSION}
+                go get sigs.k8s.io/controller-tools/cmd/controller-gen@v${CONTROLLER_GEN_VERSION}
+                os=$(go env GOOS)
+                arch=$(go env GOARCH)
+                curl -sL https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/${os}/${arch} -o kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz
+                sudo tar -xzf kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz -C /usr/local/kubebuilder --strip-components=1
+                which kustomize
+                which controller-gen
+                which kind 
+                kind create cluster
