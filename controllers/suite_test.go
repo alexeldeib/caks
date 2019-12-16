@@ -57,7 +57,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	authFile := os.Getenv("AZURE_AUTH_FILE")
 	settings := map[string]string{}
-	err = json.Unmarshal([]byte(authFile), settings)
+	err = json.Unmarshal([]byte(authFile), &settings)
 	Expect(err).NotTo(HaveOccurred())
 
 	app := settings["clientId"]
