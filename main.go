@@ -8,6 +8,9 @@ import (
 
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/cluster-api-provider-aks/controllers"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services"
+	"github.com/Azure/go-autorest/autorest/azure"
+	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -52,18 +55,39 @@ func main() {
 		os.Exit(1)
 	}
 
+	authorizer, err := auth.NewAuthorizerFromFile(azure.PublicCloud.ResourceManagerEndpoint)
+	if err != nil {
+		setupLog.Error(err, "unabled to create azure authorizer")
+		os.Exit(1)
+	}
+
+	managedClusterService := services.NewManagedClusterService(authorizer)
+	agentPoolService := services.NewAgentPoolService(authorizer)
+	vmssService := services.NewVMSSService(authorizer)
+	vmssInstanceService := services.NewVMSSInstanceService(authorizer)
+
+	_ = managedClusterService
+	_ = agentPoolService
+	_ = vmssService
+	_ = vmssInstanceService
+
 	if err = (&controllers.AzureManagedClusterReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AzureManagedCluster"),
-		Scheme: mgr.GetScheme(),
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("AzureManagedCluster"),
+		Scheme:                mgr.GetScheme(),
+		ManagedClusterService: managedClusterService,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedCluster")
 		os.Exit(1)
 	}
 	if err = (&controllers.AzureManagedMachineReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AzureManagedMachine"),
-		Scheme: mgr.GetScheme(),
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("AzureManagedMachine"),
+		Scheme:                mgr.GetScheme(),
+		ManagedClusterService: managedClusterService,
+		AgentPoolService:      agentPoolService,
+		VMSSService:           vmssService,
+		VMSSInstanceService:   vmssInstanceService,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedMachine")
 		os.Exit(1)
