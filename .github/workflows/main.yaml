@@ -34,3 +34,4 @@ jobs:
             which kustomize
             which controller-gen
             which kind
+            make test
