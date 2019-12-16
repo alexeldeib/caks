@@ -2,7 +2,7 @@ name: test
 on: [push, pull_request]
 jobs:
     test:
-        name: test cluster api provider azure
+        name: test cluster api provider aks
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@master

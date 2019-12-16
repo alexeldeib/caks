@@ -35,12 +35,16 @@ import (
 // AzureManagedMachineReconciler reconciles a AzureManagedMachine object
 type AzureManagedMachineReconciler struct {
 	client.Client
-	Log                   logr.Logger
-	Scheme                *runtime.Scheme
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+	// ManagedClusterService interface can be mocked for Azure
 	ManagedClusterService ManagedClusterService
 	AgentPoolService      AgentPoolService
 	VMSSService           VMSSService
 	VMSSInstanceService   VMSSInstanceService
+	// TODO(ace): better way to mock calls to workload API server?
+	NodeListerFunc func(client.Client) func(context.Context, *clusterv1.Cluster) ([]corev1.Node, error)
+	NodeSetterFunc func(client.Client) func(context.Context, *clusterv1.Cluster, corev1.Node) error
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=azuremanagedmachines,verbs=get;list;watch;create;update;patch;delete
@@ -135,13 +139,8 @@ func (r *AzureManagedMachineReconciler) reconcile(req ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, err
 	}
 
-	clusterClient, err := NewClusterClient(r.Client, ownerCluster)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	log.Info("reconciling machine")
-	done, err = r.reconcileMachine(ctx, clusterClient, infraCluster, infraMachine)
+	done, err = r.reconcileMachine(ctx, infraCluster, infraMachine, ownerCluster)
 	if err != nil || !done {
 		return ctrl.Result{Requeue: !done}, err
 	}
@@ -228,7 +227,13 @@ func (r *AzureManagedMachineReconciler) reconcilePool(ctx context.Context, logge
 		return false, nil
 	}
 
-	infraPool := getPool(infraCluster, infraMachine.Spec.Pool)
+	var infraPool *infrav1.AzureMachinePoolSpec
+	for _, pool := range infraCluster.Spec.NodePools {
+		if pool.Name == infraMachine.Spec.Pool {
+			infraPool = &pool
+		}
+	}
+
 	count := int32(1)
 	want := containerservice.AgentPool{
 		Name: &infraPool.Name,
@@ -273,7 +278,7 @@ func (r *AzureManagedMachineReconciler) reconcileKubeconfig(ctx context.Context,
 	return err
 }
 
-func (r *AzureManagedMachineReconciler) reconcileMachine(ctx context.Context, clusterClient client.Client, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine) (done bool, err error) {
+func (r *AzureManagedMachineReconciler) reconcileMachine(ctx context.Context, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine, ownerCluster *clusterv1.Cluster) (done bool, err error) {
 	if !infraMachine.DeletionTimestamp.IsZero() {
 		done, err := r.VMSSInstanceService.Delete(ctx, infraMachine)
 		if err != nil || !done {
@@ -286,7 +291,7 @@ func (r *AzureManagedMachineReconciler) reconcileMachine(ctx context.Context, cl
 		return false, err
 	}
 
-	nodes, err := getNodes(ctx, clusterClient)
+	nodes, err := r.NodeListerFunc(r.Client)(ctx, ownerCluster)
 	if err != nil {
 		return false, err
 	}
@@ -300,7 +305,7 @@ func (r *AzureManagedMachineReconciler) reconcileMachine(ctx context.Context, cl
 		node.Labels["azure.managed.infrastructure.cluster.x-k8s.io/pool-name"] = infraMachine.Spec.Pool
 		infraMachine.Spec.ProviderID = &node.Spec.ProviderID
 		infraMachine.Status.Ready = true
-		if err := clusterClient.Update(ctx, node); err != nil {
+		if err := r.NodeSetterFunc(r.Client)(ctx, ownerCluster, *node); err != nil {
 			return false, err
 		}
 		if err := r.Client.Update(ctx, infraMachine); err != nil {
@@ -342,16 +347,6 @@ func removeFinalizer(ctx context.Context, kubeclient client.Client, machine *inf
 			if err := kubeclient.Update(ctx, machine); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// TODO(ace): consider switching to a map. Do we *need* ordering guarantees provided by an array?
-func getPool(infraCluster *infrav1.AzureManagedCluster, name string) *infrav1.AzureMachinePoolSpec {
-	for _, pool := range infraCluster.Spec.NodePools {
-		if pool.Name == name {
-			return &pool
 		}
 	}
 	return nil
@@ -462,4 +457,29 @@ func RESTConfig(c client.Client, cluster *clusterv1.Cluster) (*rest.Config, erro
 	}
 
 	return restConfig, nil
+}
+
+func DefaultNodeListerFunc(kubeclient client.Client) func(ctx context.Context, cluster *clusterv1.Cluster) ([]corev1.Node, error) {
+	return func(ctx context.Context, ownerCluster *clusterv1.Cluster) ([]corev1.Node, error) {
+		remote, err := NewClusterClient(kubeclient, ownerCluster)
+		if err != nil {
+			return nil, err
+		}
+		nodeList := &corev1.NodeList{}
+		if err := remote.List(ctx, nodeList); err != nil {
+			return nil, err
+		}
+
+		return nodeList.Items, nil
+	}
+}
+
+func DefaultNodeSetterFunc(kubeclient client.Client) func(ctx context.Context, cluster *clusterv1.Cluster, node corev1.Node) error {
+	return func(ctx context.Context, ownerCluster *clusterv1.Cluster, node corev1.Node) error {
+		remote, err := NewClusterClient(kubeclient, ownerCluster)
+		if err != nil {
+			return err
+		}
+		return remote.Update(ctx, &node)
+	}
 }

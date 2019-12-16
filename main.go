@@ -88,6 +88,8 @@ func main() {
 		AgentPoolService:      agentPoolService,
 		VMSSService:           vmssService,
 		VMSSInstanceService:   vmssInstanceService,
+		NodeListerFunc:        controllers.DefaultNodeListerFunc,
+		NodeSetterFunc:        controllers.DefaultNodeSetterFunc,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedMachine")
 		os.Exit(1)
