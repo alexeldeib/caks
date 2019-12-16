@@ -15,12 +15,12 @@ jobs:
         steps:
         - uses: actions/checkout@master
         - name: do
-        env:
-        AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        GO111MODULE: on
-        run: |
+          env:
+              AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+              AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+              AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+              GO111MODULE: on
+          run: |
             set -eux
             KUBEBUILDER_VERSION=2.2.0
             KIND_VERSION=0.6.1
