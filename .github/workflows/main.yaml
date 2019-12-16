@@ -22,11 +22,16 @@ jobs:
             go env
             go version
             sudo mkdir -p /usr/local/kubebuilder
+            WORK=$(mktemp -d)
+            pushd $WORK 
             go get golang.org/x/tools/cmd/goimports
             go get github.com/onsi/ginkgo/ginkgo
             go get sigs.k8s.io/kind@v${KIND_VERSION}
+            rm -rf $WORK/*
             go get sigs.k8s.io/kustomize/kustomize/v3@v${KUSTOMIZE_VERSION}
+            rm -rf $WORK/*
             go get sigs.k8s.io/controller-tools/cmd/controller-gen@v${CONTROLLER_GEN_VERSION}
+            popd
             os=$(go env GOOS)
             arch=$(go env GOARCH)
             curl -sL https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/${os}/${arch} -o kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz
@@ -35,7 +40,7 @@ jobs:
             which kustomize
             which controller-gen
             which kind
-            kind create cluster --name=clusterapi --config ./hack/kind.yaml
+            kind create cluster --name=clusterapi --config ./hack/kind.yaml --kubeconfig ./kube
             kind export kubeconfig --name clusterapi --kubeconfig ./kube
             export KUBECONFIG="$(pwd)/kube"
             kubectl cluster-info
