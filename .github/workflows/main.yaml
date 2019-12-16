@@ -6,11 +6,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@master
+        - uses: docker://docker.io/alexeldeib/caks-test
         - name: do
           env:
-              AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-              AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-              AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+              AZURE_AUTH_FILE: ${{ secrets.AZURE_AUTH_FILE }}
               GO111MODULE: on
           run: |
             set -eux
