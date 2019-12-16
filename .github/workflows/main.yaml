@@ -40,9 +40,9 @@ jobs:
             which kustomize
             which controller-gen
             which kind
-            kind create cluster --name=clusterapi --config ./hack/kind.yaml --kubeconfig ./kube
+            kind create cluster --name=clusterapi --config ./hack/kind.yaml -v 6
             kind export kubeconfig --name clusterapi --kubeconfig ./kube
-            export KUBECONFIG="$(pwd)/kube"
+            kubectl config view
             kubectl cluster-info
             kubectl create -f https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.2.7/cluster-api-components.yaml
             kubectl create -f https://github.com/kubernetes-sigs/cluster-api-bootstrap-provider-kubeadm/releases/download/v0.1.5/bootstrap-components.yaml
