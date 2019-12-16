@@ -21,7 +21,7 @@ jobs:
             export PATH=$PATH:/usr/local/kubebuilder/bin:$(go env GOPATH)/bin
             go env
             go version
-            mkdir -p /usr/local/kubebuilder
+            sudo mkdir -p /usr/local/kubebuilder
             go get golang.org/x/tools/cmd/goimports
             go get github.com/onsi/ginkgo/ginkgo
             go get sigs.k8s.io/kind@v${KIND_VERSION}
@@ -30,7 +30,7 @@ jobs:
             os=$(go env GOOS)
             arch=$(go env GOARCH)
             curl -sL https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/${os}/${arch} -o kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz
-            tar -xzf kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz -C /usr/local/kubebuilder --strip-components=1
+            sudo tar -xzf kubebuilder_${KUBEBUILDER_VERSION}_${os}_${arch}.tar.gz -C /usr/local/kubebuilder --strip-components=1
             which kustomize
             which controller-gen
             which kind
