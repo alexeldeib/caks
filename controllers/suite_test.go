@@ -60,6 +60,12 @@ var _ = BeforeSuite(func(done Done) {
 	err = json.Unmarshal([]byte(authFile), settings)
 	Expect(err).NotTo(HaveOccurred())
 
+	app := settings["clientId"]
+	key := settings["clientSecret"]
+	tenant := settings["tenantId"]
+	subscription := settings["subscriptionId"]
+	_ = subscription
+
 	authorizer, err := auth.NewClientCredentialsConfig(app, key, tenant).Authorizer()
 	Expect(err).NotTo(HaveOccurred())
 
