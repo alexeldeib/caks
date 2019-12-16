@@ -40,7 +40,7 @@ jobs:
             which kustomize
             which controller-gen
             which kind
-            kind create cluster --name=clusterapi --config ./hack/kind.yaml -v 6
+            kind create cluster --name=clusterapi --config ./hack/kind.yaml --verbosity 6
             kind export kubeconfig --name clusterapi --kubeconfig ./kube
             kubectl config view
             kubectl cluster-info
