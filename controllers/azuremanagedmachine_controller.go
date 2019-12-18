@@ -165,6 +165,12 @@ func (r *AzureManagedMachineReconciler) reconcile(req ctrl.Request) (ctrl.Result
 		return ctrl.Result{}, err
 	}
 
+	log.Info("reconciling pool")
+	done, err = r.reconcilePool(ctx, log, infraCluster, infraMachine)
+	if err != nil || !done {
+		return ctrl.Result{Requeue: !done}, err
+	}
+
 	log.Info("reconciling machine")
 	done, err = r.reconcileMachine(ctx, infraCluster, infraMachine, ownerCluster)
 	if err != nil || !done {
@@ -248,7 +254,12 @@ func (r *AzureManagedMachineReconciler) reconcileCluster(ctx context.Context, lo
 	return true, nil
 }
 
-func (r *AzureManagedMachineReconciler) reconcilePool(ctx context.Context, logger logr.Logger, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine, azurePool containerservice.AgentPool) (done bool, err error) {
+func (r *AzureManagedMachineReconciler) reconcilePool(ctx context.Context, logger logr.Logger, infraCluster *infrav1.AzureManagedCluster, infraMachine *infrav1.AzureManagedMachine) (done bool, err error) {
+	azurePool, err := r.AgentPoolService.Get(ctx, infraCluster, infraMachine)
+	if err != nil && !azurePool.IsHTTPStatus(http.StatusNotFound) {
+		return false, err
+	}
+
 	if !isFinished(azurePool.ProvisioningState) {
 		return false, nil
 	}
