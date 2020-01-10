@@ -24,6 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -84,6 +85,9 @@ func (r *AzureManagedMachineReconciler) SetupWithManager(mgr ctrl.Manager) error
 				ToRequests: handler.ToRequestsFunc(r.AzureClusterToAzureMachines),
 			},
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 5,
+		}).
 		Complete(r)
 }
 
@@ -242,6 +246,7 @@ func (r *AzureManagedMachineReconciler) reconcileCluster(ctx context.Context, lo
 		managedclusters.SSHPublicKey(infraCluster.Spec.SSHPublicKey),
 	)
 
+	// Add this machine as the default node pool if the cluster doesn't have any yet.
 	if !spec.Exists() {
 		spec.Set(
 			managedclusters.AgentPool(infraPool.Name, infraPool.SKU, 1, infraPool.OSDiskSizeGB),
@@ -277,11 +282,18 @@ func (r *AzureManagedMachineReconciler) reconcilePool(ctx context.Context, log l
 
 	spec.Set(
 		agentpools.Name(infraMachine.Spec.Pool),
+		agentpools.SKU(infraPool.SKU),
 		agentpools.Cluster(infraCluster.Spec.Name),
 		agentpools.SubscriptionID(infraCluster.Spec.SubscriptionID),
 		agentpools.ResourceGroup(infraCluster.Spec.ResourceGroup),
 		agentpools.KubernetesVersion(infraCluster.Spec.Version),
 	)
+
+	if !spec.Exists() {
+		spec.Set(
+			agentpools.Count(1),
+		)
+	}
 
 	return r.AgentPoolService.Ensure(ctx, spec)
 }
@@ -430,16 +442,6 @@ func removeFinalizer(ctx context.Context, kubeclient client.Client, obj RuntimeM
 		}
 	}
 	return nil
-}
-
-// TODO(ace): consider switching to a map. Do we *need* ordering guarantees provided by an array?
-func hasPool(infraCluster *infrav1.AzureManagedCluster, pool string) bool {
-	for _, got := range infraCluster.Spec.NodePools {
-		if got.Name == pool {
-			return true
-		}
-	}
-	return false
 }
 
 func getNodes(ctx context.Context, kubeclient client.Client) ([]corev1.Node, error) {
