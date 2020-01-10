@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
 package services
 
 import (
@@ -5,8 +7,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
-	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-03-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-11-01/containerservice"
 	"github.com/Azure/go-autorest/autorest"
 )
 

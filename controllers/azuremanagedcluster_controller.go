@@ -95,7 +95,7 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 
 	if !infraCluster.DeletionTimestamp.IsZero() {
-		done, err := r.ManagedClusterService.Delete(ctx, infraCluster)
+		done, err := r.ManagedClusterService.Delete(ctx, infraCluster.Spec.SubscriptionID, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
 		if err != nil || !done {
 			return ctrl.Result{Requeue: !done}, err
 		}

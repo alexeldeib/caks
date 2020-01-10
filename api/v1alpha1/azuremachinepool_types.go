@@ -9,12 +9,12 @@ import (
 
 // AzureMachinePoolSpec defines the desired state of AzureMachinePool
 type AzureMachinePoolSpec struct {
-	// Name of the node pool.
+	// Name is the name of the node pool.
 	Name string `json:"name"`
-	// SKU of the VMs in the node pool.
+	// SKU is the size of the VMs in the node pool.
 	SKU string `json:"sku"`
-	// Capacity is the number of VMs in a node pool.
-	// Capacity int32 `json:"capacity"`
+	// OSDiskSizeGB is the disk size for every machine in this master/agent pool. If you specify 0, it will apply the default osDisk size according to the vmSize specified.
+	OSDiskSizeGB *int32 `json:"osDiskSizeGB,omitempty"`
 }
 
 // AzureMachinePoolStatus defines the observed state of AzureMachinePool

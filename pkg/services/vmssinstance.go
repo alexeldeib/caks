@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-03-01/compute"
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/go-autorest/autorest"
 )

@@ -26,6 +26,23 @@ type AzureManagedClusterSpec struct {
 	// NodePools is the list of additional node pools managed by this cluster.
 	// +kubebuilder:validation:MinItems=1
 	NodePools []AzureMachinePoolSpec `json:"nodePools"`
+	// LoadBalancerSKu for the managed cluster. Possible values include: 'Standard', 'Basic'. Defaults to standard.
+	// +kubebuilder:validation:Enum=Standard;Basic
+	LoadBalancerSKU *string `json:"loadBalancerSku,omitempty"`
+	// NetworkPlugin used for building Kubernetes network. Possible values include: 'Azure', 'Kubenet'. Defaults to Azure.
+	// +kubebuilder:validation:Enum=Azure;Kubenet
+	NetworkPlugin *string `json:"networkPlugin,omitempty"`
+	// NetworkPolicy used for building Kubernetes network. Possible values include: 'NetworkPolicyCalico', 'NetworkPolicyAzure'
+	// +kubebuilder:validation:Enum=NetworkPolicyCalico;NetworkPolicyAzure
+	NetworkPolicy *string `json:"networkPolicy,omitempty"`
+	// PodCIDR is a CIDR notation IP range from which to assign pod IPs when kubenet is used.
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$`
+	PodCIDR *string `json:"podCidr,omitempty"`
+	// ServiceCIDR is a CIDR notation IP range from which to assign service cluster IPs. It must not overlap with any Subnet IP ranges.
+	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$`
+	ServiceCIDR *string `json:"serviceCidr,omitempty"`
+	// DNSServiceIP - An IP address assigned to the Kubernetes DNS service. It must be within the Kubernetes service address range specified in serviceCidr.
+	DNSServiceIP *string `json:"dnsServiceIP,omitempty"`
 }
 
 // AzureManagedClusterStatus defines the observed state of AzureManagedCluster

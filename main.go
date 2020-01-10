@@ -4,11 +4,11 @@ package main
 
 import (
 	"flag"
+	"net"
+	"net/http"
 	"os"
+	"time"
 
-	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
-	"github.com/Azure/cluster-api-provider-aks/controllers"
-	"github.com/Azure/cluster-api-provider-aks/pkg/services"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,7 +17,13 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	// +kubebuilder:scaffold:imports
+
+	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	"github.com/Azure/cluster-api-provider-aks/controllers"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 )
 
 var (
@@ -61,7 +67,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	managedClusterService := services.NewManagedClusterService(authorizer)
+	// TODO(ace): autorest helpers for live and recorded client
+	sender := &http.Client{
+		// Prevent endless redirects
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 4 * time.Second,
+			ResponseHeaderTimeout: 3 * time.Second,
+		},
+	}
+
+	managedClusterService := managedclusters.NewManagedClusterService(authorizer, sender)
 	agentPoolService := services.NewAgentPoolService(authorizer)
 	vmssService := services.NewVMSSService(authorizer)
 	vmssInstanceService := services.NewVMSSInstanceService(authorizer)

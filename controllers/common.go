@@ -5,7 +5,7 @@ import (
 	goruntime "runtime"
 	"strings"
 
-	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
+	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-11-01/containerservice"
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"

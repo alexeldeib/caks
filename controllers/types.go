@@ -3,17 +3,18 @@ package controllers
 import (
 	"context"
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-07-01/compute"
-	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-10-01/containerservice"
+	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-03-01/compute"
+	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-11-01/containerservice"
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 )
 
 // ManagedClusterService ...
 type ManagedClusterService interface {
-	Get(ctx context.Context, cluster *infrav1.AzureManagedCluster) (containerservice.ManagedCluster, error)
-	CreateOrUpdate(ctx context.Context, cluster *infrav1.AzureManagedCluster, azureCluster containerservice.ManagedCluster) (err error)
-	Delete(ctx context.Context, cluster *infrav1.AzureManagedCluster) (done bool, err error)
-	GetCredentials(ctx context.Context, cluster *infrav1.AzureManagedCluster) ([]byte, error)
+	Get(ctx context.Context, subscriptionID, resourceGroup, name string) (*managedclusters.Spec, error)
+	CreateOrUpdate(ctx context.Context, subscriptionID, resourceGroup, name string, spec *managedclusters.Spec) (err error)
+	Delete(ctx context.Context, subscriptionID, resourceGroup, name string) (done bool, err error)
+	GetCredentials(ctx context.Context, subscriptionID, resourceGroup, name string) ([]byte, error)
 }
 
 // AgentPoolService ...

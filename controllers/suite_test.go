@@ -5,14 +5,18 @@ package controllers
 
 import (
 	"encoding/json"
+	"net"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/cluster-api-provider-aks/pkg/services"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -74,7 +78,23 @@ var _ = BeforeSuite(func(done Done) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	managedClusterService := services.NewManagedClusterService(authorizer)
+	// TODO(ace): autorest helpers for live and recorded client
+	sender := &http.Client{
+		// Prevent endless redirects
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 10 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+
+			ExpectContinueTimeout: 4 * time.Second,
+			ResponseHeaderTimeout: 3 * time.Second,
+		},
+	}
+
+	managedClusterService := managedclusters.NewManagedClusterService(authorizer, sender)
 	agentPoolService := services.NewAgentPoolService(authorizer)
 	vmssService := services.NewVMSSService(authorizer)
 	vmssInstanceService := services.NewVMSSInstanceService(authorizer)
