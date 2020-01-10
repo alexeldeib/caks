@@ -1,5 +1,3 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT license.
 package agentpools
 
 import (
@@ -9,91 +7,95 @@ import (
 var defaultUser string = "azureuser"
 var emptyString string = ""
 
-type SpecOption func(*Spec) *Spec
+type specOption func(*Spec) *Spec
 
 type Spec struct {
 	subscriptionID string
-	resourceGroup  string
+	group          string
 	cluster        string
-	Internal       *containerservice.AgentPool
+	internal       containerservice.AgentPool
 }
 
-func NewSpec(options ...SpecOption) *Spec {
+func defaultSpec() *Spec {
 	result := &Spec{
-		Internal: &containerservice.AgentPool{
+		internal: containerservice.AgentPool{
 			ManagedClusterAgentPoolProfileProperties: &containerservice.ManagedClusterAgentPoolProfileProperties{
 				Type: containerservice.VirtualMachineScaleSets,
 			},
 		},
 	}
-	for _, option := range options {
-		result = option(result)
-	}
 	return result
 }
 
-func (s *Spec) Set(options ...SpecOption) {
+func (s *Spec) Set(options ...specOption) {
 	for _, option := range options {
 		s = option(s)
 	}
 }
 
 func (s *Spec) Exists() bool {
-	return s.Internal.ID != nil
+	return s.internal.ID != nil
 }
 
-func Name(name string) SpecOption {
+func Name(name string) specOption {
 	return func(o *Spec) *Spec {
-		o.Internal.Name = &name
+		o.internal.Name = &name
 		return o
 	}
 }
 
-func Cluster(cluster string) SpecOption {
+func Cluster(cluster string) specOption {
 	return func(o *Spec) *Spec {
 		o.cluster = cluster
 		return o
 	}
 }
 
-func SubscriptionID(sub string) SpecOption {
+func SubscriptionID(sub string) specOption {
 	return func(o *Spec) *Spec {
 		o.subscriptionID = sub
 		return o
 	}
 }
 
-func ResourceGroup(group string) SpecOption {
+func ResourceGroup(group string) specOption {
 	return func(o *Spec) *Spec {
-		o.resourceGroup = group
+		o.group = group
 		return o
 	}
 }
 
-func KubernetesVersion(version string) SpecOption {
+func KubernetesVersion(version string) specOption {
 	return func(o *Spec) *Spec {
-		o.Internal.OrchestratorVersion = &version
+		o.internal.OrchestratorVersion = &version
 		return o
 	}
 }
 
-func Count(count int32) SpecOption {
+func Count(count int32) specOption {
 	return func(o *Spec) *Spec {
-		o.Internal.Count = &count
+		o.internal.Count = &count
 		return o
 	}
 }
 
-func SKU(sku string) SpecOption {
+func SKU(sku string) specOption {
 	return func(o *Spec) *Spec {
-		o.Internal.VMSize = containerservice.VMSizeTypes(sku)
+		o.internal.VMSize = containerservice.VMSizeTypes(sku)
 		return o
 	}
 }
 
-func OSDiskSizeGB(size int32) SpecOption {
+func OSDiskSizeGB(size *int32) specOption {
 	return func(o *Spec) *Spec {
-		o.Internal.OsDiskSizeGB = &size
+		o.internal.OsDiskSizeGB = size
 		return o
 	}
+}
+
+func (s *Spec) Count() int32 {
+	if s.internal.Count == nil {
+		return 0
+	}
+	return *s.internal.Count
 }

@@ -14,6 +14,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 )
 
 const finalizer = "azuremanagedclusters.infrastructure.cluster.x-k8s.io"
@@ -28,7 +30,7 @@ type AzureManagedClusterReconciler struct {
 	client.Client
 	Log                   logr.Logger
 	Scheme                *runtime.Scheme
-	ManagedClusterService ManagedClusterService
+	ManagedClusterService *managedclusters.Service
 }
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=azuremanagedclusters,verbs=get;list;watch;create;update;patch;delete
@@ -95,11 +97,11 @@ func (r *AzureManagedClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result
 	}
 
 	if !infraCluster.DeletionTimestamp.IsZero() {
-		done, err := r.ManagedClusterService.Delete(ctx, infraCluster.Spec.SubscriptionID, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name)
-		if err != nil || !done {
-			return ctrl.Result{Requeue: !done}, err
+		if err := r.ManagedClusterService.Delete(ctx, infraCluster.Spec.SubscriptionID, infraCluster.Spec.ResourceGroup, infraCluster.Spec.Name); err != nil {
+			return ctrl.Result{}, err
 		}
-
+		controllerutil.RemoveFinalizer(infraCluster, finalizer)
+		return ctrl.Result{}, r.Update(ctx, infraCluster)
 	}
 
 	// Add finalizer if missing

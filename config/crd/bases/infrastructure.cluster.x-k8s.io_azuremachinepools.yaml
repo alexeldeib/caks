@@ -35,10 +35,16 @@ spec:
           description: AzureMachinePoolSpec defines the desired state of AzureMachinePool
           properties:
             name:
-              description: Name of the node pool.
+              description: Name is the name of the node pool.
               type: string
+            osDiskSizeGB:
+              description: OSDiskSizeGB is the disk size for every machine in this
+                master/agent pool. If you specify 0, it will apply the default osDisk
+                size according to the vmSize specified.
+              format: int32
+              type: integer
             sku:
-              description: SKU of the VMs in the node pool.
+              description: SKU is the size of the VMs in the node pool.
               type: string
           required:
           - name

@@ -1,37 +1,22 @@
 package controllers
 
-import (
-	"context"
+// // ManagedClusterService ...
+// type ManagedClusterService interface {
+// 	Get(ctx context.Context, subscriptionID, resourceGroup, name string) (*managedclusters.Spec, error)
+// 	Ensure(ctx context.Context, spec *managedclusters.Spec) error
+// 	Delete(ctx context.Context, subscriptionID, resourceGroup, name string) error
+// 	GetKubeconfig(ctx context.Context, subscriptionID, resourceGroup, name string) ([]byte, error)
+// }
 
-	"github.com/Azure/azure-sdk-for-go/services/compute/mgmt/2019-03-01/compute"
-	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-11-01/containerservice"
-	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
-	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
-)
+// // AgentPoolService ...
+// type AgentPoolService interface {
+// 	Get(ctx context.Context, subscriptionID, resourceGroup, cluster, name string) (*agentpools.Spec, error)
+// 	Ensure(ctx context.Context, spec *agentpools.Spec) error
+// 	Delete(ctx context.Context, subscriptionID, resourceGroup, cluster, name string) error
+// }
 
-// ManagedClusterService ...
-type ManagedClusterService interface {
-	Get(ctx context.Context, subscriptionID, resourceGroup, name string) (*managedclusters.Spec, error)
-	CreateOrUpdate(ctx context.Context, subscriptionID, resourceGroup, name string, spec *managedclusters.Spec) (err error)
-	Delete(ctx context.Context, subscriptionID, resourceGroup, name string) (done bool, err error)
-	GetCredentials(ctx context.Context, subscriptionID, resourceGroup, name string) ([]byte, error)
-}
-
-// AgentPoolService ...
-type AgentPoolService interface {
-	Get(ctx context.Context, cluster *infrav1.AzureManagedCluster, machine *infrav1.AzureManagedMachine) (containerservice.AgentPool, error)
-	CreateOrUpdate(ctx context.Context, cluster *infrav1.AzureManagedCluster, agentPool containerservice.AgentPool) (err error)
-	Delete(ctx context.Context, cluster *infrav1.AzureManagedCluster, agentPool containerservice.AgentPool) (done bool, err error)
-}
-
-// VMSSService ...
-type VMSSService interface {
-	Get(ctx context.Context, cluster *infrav1.AzureManagedCluster) (compute.VirtualMachineScaleSet, error)
-	List(ctx context.Context, cluster *infrav1.AzureManagedCluster) (compute.VirtualMachineScaleSetListResultIterator, error)
-}
-
-// VMSSInstanceService ...
-type VMSSInstanceService interface {
-	Get(ctx context.Context, machine *infrav1.AzureManagedMachine) (compute.VirtualMachineScaleSetVM, error)
-	Delete(ctx context.Context, machine *infrav1.AzureManagedMachine) (done bool, err error)
-}
+// // VMSSInstanceService ...
+// type VMSSInstanceService interface {
+// 	Get(ctx context.Context, subscriptionID, resourceGroup, cluster, name string) (*agentpools.Spec, error)
+// 	Delete(ctx context.Context, subscriptionID, resourceGroup, cluster, name string) error
+// }

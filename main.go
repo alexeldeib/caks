@@ -4,10 +4,7 @@ package main
 
 import (
 	"flag"
-	"net"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
@@ -22,8 +19,9 @@ import (
 
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	"github.com/Azure/cluster-api-provider-aks/controllers"
-	"github.com/Azure/cluster-api-provider-aks/pkg/services"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/agentpools"
 	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/scalesetvms"
 )
 
 var (
@@ -67,29 +65,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO(ace): autorest helpers for live and recorded client
-	sender := &http.Client{
-		// Prevent endless redirects
-		Timeout: 10 * time.Minute,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 10 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 4 * time.Second,
-			ResponseHeaderTimeout: 3 * time.Second,
-		},
-	}
-
-	managedClusterService := managedclusters.NewManagedClusterService(authorizer, sender)
-	agentPoolService := services.NewAgentPoolService(authorizer)
-	vmssService := services.NewVMSSService(authorizer)
-	vmssInstanceService := services.NewVMSSInstanceService(authorizer)
+	managedClusterService := managedclusters.NewService(authorizer)
+	agentPoolService := agentpools.NewService(authorizer)
+	vmssInstanceService := scalesetvms.NewService(authorizer)
 
 	_ = managedClusterService
 	_ = agentPoolService
-	_ = vmssService
 	_ = vmssInstanceService
 
 	if err = (&controllers.AzureManagedClusterReconciler{
@@ -107,7 +88,6 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		ManagedClusterService: managedClusterService,
 		AgentPoolService:      agentPoolService,
-		VMSSService:           vmssService,
 		VMSSInstanceService:   vmssInstanceService,
 		NodeListerFunc:        controllers.DefaultNodeListerFunc,
 		NodeSetterFunc:        controllers.DefaultNodeSetterFunc,

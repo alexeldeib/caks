@@ -5,18 +5,12 @@ package controllers
 
 import (
 	"encoding/json"
-	"net"
-	"net/http"
 	"os"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
-	"github.com/Azure/cluster-api-provider-aks/pkg/services"
-	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -25,7 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	// +kubebuilder:scaffold:imports
+
+	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/agentpools"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
+	"github.com/Azure/cluster-api-provider-aks/pkg/services/scalesetvms"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -76,28 +76,9 @@ var _ = BeforeSuite(func(done Done) {
 	log := logf.Log.WithName("testmanager")
 	log.WithValues("app", app, "tenant", tenant).Info("using client configuration")
 
-	Expect(err).NotTo(HaveOccurred())
-
-	// TODO(ace): autorest helpers for live and recorded client
-	sender := &http.Client{
-		// Prevent endless redirects
-		Timeout: 10 * time.Minute,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 10 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-
-			ExpectContinueTimeout: 4 * time.Second,
-			ResponseHeaderTimeout: 3 * time.Second,
-		},
-	}
-
-	managedClusterService := managedclusters.NewManagedClusterService(authorizer, sender)
-	agentPoolService := services.NewAgentPoolService(authorizer)
-	vmssService := services.NewVMSSService(authorizer)
-	vmssInstanceService := services.NewVMSSInstanceService(authorizer)
+	managedClusterService := managedclusters.NewService(authorizer)
+	agentPoolService := agentpools.NewService(authorizer)
+	vmssInstanceService := scalesetvms.NewService(authorizer)
 
 	err = infrav1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -129,7 +110,6 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme:                mgr.GetScheme(),
 		ManagedClusterService: managedClusterService,
 		AgentPoolService:      agentPoolService,
-		VMSSService:           vmssService,
 		VMSSInstanceService:   vmssInstanceService,
 	}).SetupWithManager(mgr)
 	Expect(err).ToNot(HaveOccurred())

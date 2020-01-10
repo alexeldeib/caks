@@ -11,12 +11,9 @@ import (
 	. "github.com/onsi/gomega"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	. "github.com/Azure/cluster-api-provider-aks/pkg/services/managedclusters"
 )
 
 var (
-	svc        *ManagedClusterService
 	settings   auth.FileSettings
 	log        logr.Logger
 	authorizer autorest.Authorizer
