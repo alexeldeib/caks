@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
@@ -33,6 +34,7 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = infrav1.AddToScheme(scheme)
 	_ = clusterv1.AddToScheme(scheme)
+	_ = infrastructurev1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -82,6 +84,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedCluster")
 		os.Exit(1)
 	}
+
 	if err = (&controllers.AzureManagedMachineReconciler{
 		Client:                mgr.GetClient(),
 		Log:                   ctrl.Log.WithName("controllers").WithName("AzureManagedMachine"),
@@ -95,12 +98,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedMachine")
 		os.Exit(1)
 	}
-	if err = (&controllers.AzureMachinePoolReconciler{
+
+	if err = (&controllers.AzureManagedMachinePoolReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AzureMachinePool"),
+		Log:    ctrl.Log.WithName("controllers").WithName("AzureManagedMachinePool"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AzureMachinePool")
+		setupLog.Error(err, "unable to create controller", "controller", "AzureManagedMachinePool")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

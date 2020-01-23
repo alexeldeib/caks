@@ -1,20 +1,24 @@
-# permissions to do viewer azuremachinepools.
+# permissions for end users to edit azuremanagedmachinepools.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: azuremachinepool-viewer-role
+  name: azuremanagedmachinepool-editor-role
 rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - azuremachinepools
+  - azuremanagedmachinepools
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
-  - azuremachinepools/status
+  - azuremanagedmachinepools/status
   verbs:
   - get

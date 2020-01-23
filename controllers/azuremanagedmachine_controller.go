@@ -53,7 +53,6 @@ type machineContext struct {
 	Machine        *clusterv1.Machine
 	Cluster        *clusterv1.Cluster
 	InfraCluster   *infrav1.AzureManagedCluster
-	InfraPool      *infrav1.AzureMachinePoolSpec
 	InfraMachine   *infrav1.AzureManagedMachine
 	ManagedCluster *managedclusters.Spec
 }

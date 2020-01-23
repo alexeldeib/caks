@@ -2,9 +2,6 @@ package managedclusters
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"net/http/httputil"
 
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2019-11-01/containerservice"
 	"github.com/Azure/go-autorest/autorest"
@@ -46,39 +43,4 @@ func (c *client) delete(ctx context.Context, group, name string) error {
 		return err
 	}
 	return future.WaitForCompletionRef(ctx, c.Client)
-}
-
-func addDebug(client *autorest.Client) {
-	client.RequestInspector = logRequest()
-	client.ResponseInspector = logResponse()
-}
-
-// logRequest logs full autorest requests for any Azure client.
-func logRequest() autorest.PrepareDecorator {
-	return func(p autorest.Preparer) autorest.Preparer {
-		return autorest.PreparerFunc(func(r *http.Request) (*http.Request, error) {
-			r, err := p.Prepare(r)
-			if err != nil {
-				fmt.Println(err)
-			}
-			dump, _ := httputil.DumpRequestOut(r, true)
-			fmt.Println(string(dump))
-			return r, err
-		})
-	}
-}
-
-// logResponse logs full autorest responses for any Azure client.
-func logResponse() autorest.RespondDecorator {
-	return func(p autorest.Responder) autorest.Responder {
-		return autorest.ResponderFunc(func(r *http.Response) error {
-			err := p.Respond(r)
-			if err != nil {
-				fmt.Println(err)
-			}
-			dump, _ := httputil.DumpResponse(r, true)
-			fmt.Println(string(dump))
-			return err
-		})
-	}
 }

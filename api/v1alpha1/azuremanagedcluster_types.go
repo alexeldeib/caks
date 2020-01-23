@@ -9,6 +9,19 @@ import (
 
 // AzureManagedClusterSpec defines the desired state of AzureManagedCluster
 type AzureManagedClusterSpec struct {
+	// Version defines the kubernetes version of the cluster control plane.
+	Version string `json:"version"`
+	// DefaultPoolTemplate is the template for the default node pool. This node pool may not be deleted without also deleting the cluster, and it may not be scaled to zero.
+	DefaultPool *AzureMachinePoolSpec `json:"defaultPool,omitempty"` // +optional
+	// LoadBalancerSKU for the managed cluster. Possible values include: 'Standard', 'Basic'. Defaults to standard.
+	// +kubebuilder:validation:Enum=Standard;Basic
+	LoadBalancerSKU *string `json:"loadBalancerSku,omitempty"`
+	// NetworkPlugin used for building Kubernetes network. Possible values include: 'Azure', 'Kubenet'. Defaults to Azure.
+	// +kubebuilder:validation:Enum=Azure;Kubenet
+	NetworkPlugin *string `json:"networkPlugin,omitempty"`
+	// NetworkPolicy used for building Kubernetes network. Possible values include: 'NetworkPolicyCalico', 'NetworkPolicyAzure'
+	// +kubebuilder:validation:Enum=NetworkPolicyCalico;NetworkPolicyAzure
+	NetworkPolicy *string `json:"networkPolicy,omitempty"`
 	// SubscriptionID is the subscription id for an azure resource.
 	// +kubebuilder:validation:Pattern=`^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$`
 	SubscriptionID string `json:"subscriptionId"`
@@ -21,35 +34,13 @@ type AzureManagedClusterSpec struct {
 	Name string `json:"name"`
 	// SSHPublicKey is a string literal containing an ssh public key.
 	SSHPublicKey string `json:"sshPublicKey"`
-	// Version defines the kubernetes version of the cluster.
-	Version string `json:"version"`
-	// NodePools is the list of additional node pools managed by this cluster.
-	// +kubebuilder:validation:MinItems=1
-	NodePools []AzureMachinePoolSpec `json:"nodePools"`
-	// LoadBalancerSKu for the managed cluster. Possible values include: 'Standard', 'Basic'. Defaults to standard.
-	// +kubebuilder:validation:Enum=Standard;Basic
-	LoadBalancerSKU *string `json:"loadBalancerSku,omitempty"`
-	// NetworkPlugin used for building Kubernetes network. Possible values include: 'Azure', 'Kubenet'. Defaults to Azure.
-	// +kubebuilder:validation:Enum=Azure;Kubenet
-	NetworkPlugin *string `json:"networkPlugin,omitempty"`
-	// NetworkPolicy used for building Kubernetes network. Possible values include: 'NetworkPolicyCalico', 'NetworkPolicyAzure'
-	// +kubebuilder:validation:Enum=NetworkPolicyCalico;NetworkPolicyAzure
-	NetworkPolicy *string `json:"networkPolicy,omitempty"`
-	// PodCIDR is a CIDR notation IP range from which to assign pod IPs when kubenet is used.
-	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$`
-	PodCIDR *string `json:"podCidr,omitempty"`
-	// ServiceCIDR is a CIDR notation IP range from which to assign service cluster IPs. It must not overlap with any Subnet IP ranges.
-	// +kubebuilder:validation:Pattern=`^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$`
-	ServiceCIDR *string `json:"serviceCidr,omitempty"`
-	// DNSServiceIP - An IP address assigned to the Kubernetes DNS service. It must be within the Kubernetes service address range specified in serviceCidr.
-	DNSServiceIP *string `json:"dnsServiceIP,omitempty"`
 }
 
 // AzureManagedClusterStatus defines the observed state of AzureManagedCluster
 type AzureManagedClusterStatus struct {
 	// Ready is true when the cluster infrastructure is ready for dependent steps to utilize it.
-	Ready           bool    `json:"ready"`
-	DefaultNodePool *string `json:"defaultNodePool,omitempty"`
+	Ready       bool `json:"ready"`
+	Initialized bool `json:"initialized"`
 	// APIEndpoints represents the endpoints to communicate with the control plane.
 	// +optional
 	APIEndpoints []APIEndpoint `json:"apiEndpoints,omitempty"`
@@ -68,6 +59,7 @@ type AzureManagedCluster struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
 
 // AzureManagedClusterList contains a list of AzureManagedCluster
 type AzureManagedClusterList struct {

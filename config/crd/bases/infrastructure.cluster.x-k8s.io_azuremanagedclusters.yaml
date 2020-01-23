@@ -37,13 +37,12 @@ spec:
         spec:
           description: AzureManagedClusterSpec defines the desired state of AzureManagedCluster
           properties:
-            dnsServiceIP:
-              description: DNSServiceIP - An IP address assigned to the Kubernetes
-                DNS service. It must be within the Kubernetes service address range
-                specified in serviceCidr.
-              type: string
+            defaultPool:
+              description: DefaultPoolTemplate is the template for the default node
+                pool. This node pool may not be deleted without also deleting the
+                cluster, and it may not be scaled to zero.
             loadBalancerSku:
-              description: 'LoadBalancerSKu for the managed cluster. Possible values
+              description: 'LoadBalancerSKU for the managed cluster. Possible values
                 include: ''Standard'', ''Basic''. Defaults to standard.'
               enum:
               - Standard
@@ -69,43 +68,9 @@ spec:
               - NetworkPolicyCalico
               - NetworkPolicyAzure
               type: string
-            nodePools:
-              description: NodePools is the list of additional node pools managed
-                by this cluster.
-              items:
-                description: AzureMachinePoolSpec defines the desired state of AzureMachinePool
-                properties:
-                  name:
-                    description: Name is the name of the node pool.
-                    type: string
-                  osDiskSizeGB:
-                    description: OSDiskSizeGB is the disk size for every machine in
-                      this master/agent pool. If you specify 0, it will apply the
-                      default osDisk size according to the vmSize specified.
-                    format: int32
-                    type: integer
-                  sku:
-                    description: SKU is the size of the VMs in the node pool.
-                    type: string
-                required:
-                - name
-                - sku
-                type: object
-              minItems: 1
-              type: array
-            podCidr:
-              description: PodCIDR is a CIDR notation IP range from which to assign
-                pod IPs when kubenet is used.
-              pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$
-              type: string
             resourceGroup:
               description: ResourceGroup is the resource group name for an azure resource.
               pattern: ^[-\w\._\(\)]+$
-              type: string
-            serviceCidr:
-              description: ServiceCIDR is a CIDR notation IP range from which to assign
-                service cluster IPs. It must not overlap with any Subnet IP ranges.
-              pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$
               type: string
             sshPublicKey:
               description: SSHPublicKey is a string literal containing an ssh public
@@ -116,12 +81,12 @@ spec:
               pattern: ^[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$
               type: string
             version:
-              description: Version defines the kubernetes version of the cluster.
+              description: Version defines the kubernetes version of the cluster control
+                plane.
               type: string
           required:
           - location
           - name
-          - nodePools
           - resourceGroup
           - sshPublicKey
           - subscriptionId
@@ -147,13 +112,14 @@ spec:
                 - port
                 type: object
               type: array
-            defaultNodePool:
-              type: string
+            initialized:
+              type: boolean
             ready:
               description: Ready is true when the cluster infrastructure is ready
                 for dependent steps to utilize it.
               type: boolean
           required:
+          - initialized
           - ready
           type: object
       type: object

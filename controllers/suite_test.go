@@ -20,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	infrastructurev1alpha1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 
 	infrav1 "github.com/Azure/cluster-api-provider-aks/api/v1alpha1"
@@ -81,6 +82,9 @@ var _ = BeforeSuite(func(done Done) {
 	vmssInstanceService := scalesetvms.NewService(authorizer)
 
 	err = infrav1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = infrastructurev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

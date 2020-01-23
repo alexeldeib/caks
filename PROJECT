@@ -8,6 +8,6 @@ resources:
   kind: AzureManagedMachine
   version: v1alpha1
 - group: infrastructure
-  kind: AzureMachinePool
+  kind: AzureManagedMachinePool
   version: v1alpha1
 version: "2"
